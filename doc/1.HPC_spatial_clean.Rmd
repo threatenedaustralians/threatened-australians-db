@@ -1,0 +1,227 @@
+---
+title: Cleaning the spatial data
+author: Gareth Kindler
+output:
+    html_document:
+        code_folding: show
+---
+
+This document details the cleaning of the data that has spatial attributes relevant to the Threatened Australians (threatened.org.au) project. It is the first of four documents.
+
+I run this code on a HPC as it speeds things up for me but it can run fine locally.
+For this reason I've set the code chunks to not evaluate. You can find the R script version of document in the `~/scripts` directory.
+
+## Libraries
+
+```{r, eval = FALSE, class.source = 'fold-hide'}
+library(tidyverse)
+library(sf)
+library(magrittr)
+library(jsonlite)
+library(units)
+library(readxl)
+library(stringr)
+```
+
+## Import: Electoral
+
+Commonwealth Electoral Divisions (CEDs) data comes form the Australian Electoral Commission (AEC). The website for this data can be found [here](https://www.aec.gov.au/electorates/gis/index.htm). The same data can be found from various other government data repositories.
+
+We've used the 2019 CEDs data as the incumbents represent those boundaries. Post election we'll be updating the web app to use the 2021/22 boundaries.
+
+```{r, eval = FALSE}
+elects <- st_read(
+    # "~/data/2021-Cwlth_electoral_boundaries_ESRI/2021_ELB_region.shp"
+    "~/data/AEC_electoral_boundaries_2019/COM_ELB_region.shp"
+)
+```
+
+## Import: Threatened Species
+
+We've used public grids of the *Species of National Environmental Significance (SNES)* Database which contains range maps/distributions of species listed as threatened on the *Environment Protection and Biodiversity Conservation Act 1999 (EPBC Act)*. This website and consequent links to the data can be found [here](https://www.awe.gov.au/environment/environmental-information-data/databases-applications/snes).
+
+```{r, eval = FALSE}
+species <- st_read(
+    "~/data/SNES_public_1july2021.gdb"
+)
+```
+
+## Clean: Electoral
+
+The CED data includes some errors that will mess with joins that we do later on as we are using electorate names (Elect-div) as the key.
+
+```{r, eval = FALSE}
+elects$Elect_div <- gsub("Eden-monaro", "Eden-Monaro", elects$Elect_div)
+elects$Elect_div <- gsub("Mcewen", "McEwen", elects$Elect_div)
+elects$Elect_div <- gsub("Mcmahon", "McMahon", elects$Elect_div)
+elects$Elect_div <- gsub("Mcpherson", "McPherson", elects$Elect_div)
+elects$Elect_div <- gsub("O'connor", "O'Connor", elects$Elect_div)
+```
+
+Remove unncessary rows and do a fresh caluclation of electorate size as this will be used for comparisons.
+
+```{r, eval = FALSE}
+elects_clean <- elects %>%
+    st_make_valid() %>%
+    select(
+        Elect_div, geometry
+    ) %>%
+    rename(
+        electorate = Elect_div
+    ) %>%
+    mutate(
+        electorate_area_sqkm = units::set_units(st_area(.), km^2) %>%
+            as.numeric()
+    ) %T>%
+    st_write(
+        "~/output/clean_data/elects_clean.gpkg",
+        layer = "elects_clean", append = FALSE, delete_dsn = TRUE
+    )
+```
+
+Although unionised electorate data is not part of the project. Having it to compare and play with is useful. I've kept it in.
+
+```{r, eval = FALSE}
+elects_union_clean <- elects_clean %>%
+    st_union(by_feature = FALSE) %>%
+    st_sf() %>%
+    st_make_valid() %T>%
+    st_write(
+        "~/output/clean_data/elects_union_clean.gpkg",
+        layer = "elects_union_clean", append = FALSE, delete_dsn = TRUE
+    )
+```
+
+## Clean: Species
+
+The metadata of the public grid SNES data states:
+
+> Generalised presence categories in the public gridded version are one of:\
+> 2- Species or species habitat is likely to occur within area\
+> 1- Species or species habitat may occur within area
+
+In the SNES data this is denoted as the `PRESENCE_RANK` attribute. We used "species or species habitat is likely to occur within area" distributions as this is the more definitive (than "may occur") and represents the area of occupancy (AOO) as opposed to extent of occurrence (EOO) (Gaston & Fuller, 2009).
+
+We removed species with an undefined threatened_status and summarised by unique identifiers to remove duplicated rows/geometries.
+
+The spelling mistake of *Rutidosis leptorhynchoides* was corrected by changing it to *Rutidosis leptorrhynchoides*.
+
+We automated the cleaning process of the `scientific_name` and `vernacular_name` as there was a bit of boilerplate text hanging around.
+
+```{r, eval = FALSE}
+#### Clean: Species ####
+
+species_clean <- species %>%
+    filter(
+        PRESENCE_RANK == 2
+    ) %>%
+    filter(
+        !is.na(THREATENED_STATUS)
+    ) %>%
+    select(c(
+        "LISTED_TAXON_ID", "SCIENTIFIC_NAME", "VERNACULAR_NAME",
+        "THREATENED_STATUS", "MIGRATORY_STATUS", "MARINE",
+        "CETACEAN", "TAXON_GROUP", "SPRAT_PROFILE",
+        "TAXON_KINGDOM", "Shape"
+    )) %>%
+    rename(
+        taxon_ID = LISTED_TAXON_ID,
+        scientific_name = SCIENTIFIC_NAME,
+        vernacular_name = VERNACULAR_NAME,
+        threatened_status = THREATENED_STATUS,
+        migratory_status = MIGRATORY_STATUS,
+        marine = MARINE,
+        cetacean = CETACEAN,
+        taxon_group = TAXON_GROUP,
+        taxon_kingdom = TAXON_KINGDOM,
+        SPRAT_profile = SPRAT_PROFILE,
+        geometry = Shape
+    ) %>%
+    st_make_valid() %>%
+    group_by(
+        taxon_ID,
+        scientific_name,
+        vernacular_name,
+        threatened_status,
+        migratory_status,
+        marine,
+        cetacean,
+        taxon_group,
+        taxon_kingdom,
+        SPRAT_profile
+    ) %>%
+    summarise() %>%
+    ungroup() %>%
+    st_make_valid() %>%
+    relocate(
+        taxon_ID, scientific_name,
+        vernacular_name, threatened_status,
+        migratory_status, marine,
+        cetacean, taxon_group,
+        taxon_kingdom, SPRAT_profile,
+        geometry
+    ) %>%
+    # Check MW species name adjustment script
+    mutate(
+        scientific_name = replace(
+            scientific_name,
+            scientific_name == "Rutidosis leptorhynchoides",
+            "Rutidosis leptorrhynchoides"
+        )
+    ) %>%
+    mutate(
+        scientific_name_clean = word(
+            scientific_name, 1, 1,
+            sep = fixed("(")
+        )
+    ) %>%
+    mutate(
+        vernacular_name_other = word(
+            vernacular_name, 2, -1,
+            sep = fixed(", ")
+        )
+    ) %>%
+    mutate(
+        vernacular_name_first = word(
+            vernacular_name, 1, 1,
+            sep = fixed(", ")
+        )
+    ) %>%
+    mutate(
+        vernacular_name_first_clean = word(
+            vernacular_name_first, 1, 1,
+            sep = fixed("(")
+        )
+    ) %>%
+    mutate(
+        species_range_area_sqkm = units::set_units(st_area(.), km^2) %>%
+            as.numeric()
+    ) %T>%
+    st_write(
+        "~/output/clean_data/species_clean.gpkg",
+        layer = "species_clean", append = FALSE, delete_dsn = TRUE
+    )
+```
+
+As the geometry attribute accounts for most of the data size, we removed it to create a reference file for ease of manipulation.
+
+```{r, eval = FALSE}
+species_clean_no_geom <- species_clean %>%
+    st_set_geometry(NULL) %T>%
+    write_json(
+        "~/output/clean_data/species_clean_no_geom.json"
+    )
+```
+
+The following code is relevant to figure creation used in the Conversation article. It is not needed for the web app analysis.
+
+```{r, eval = FALSE}
+species_union_clean <- species_clean %>%
+    st_union(by_feature = FALSE) %>%
+    st_sf() %>%
+    st_make_valid() %T>%
+    st_write(
+        "~/output/clean_data/species_union_clean.gpkg",
+        layer = "species_union_clean", append = FALSE, delete_dsn = TRUE
+    )
+```

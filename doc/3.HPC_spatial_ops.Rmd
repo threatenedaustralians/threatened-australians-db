@@ -1,0 +1,125 @@
+---
+title: Spatial operations of the data
+author: Gareth Kindler
+output:
+    html_document:
+        code_folding: show
+---
+
+This document details the spatial operations of the data relevant to the Threatened Australians (threatened.org.au) project. It is the third of four documents.
+
+I run this code on a HPC, it could run locally but would just take a while.
+For this reason I've set the code chunks to not evaluate. You can find the R script version of document in the `~/scripts` directory.
+
+## Libraries
+
+```{r, eval = FALSE, class.source = 'fold-hide'}
+library(tidyverse)
+library(sf)
+library(jsonlite)
+library(magrittr)
+library(units)
+```
+
+## Import: Electoral and Threatened Species
+
+```{r, eval = FALSE}
+elects <- st_read(
+    "output/clean_data/elects_clean.gpkg"
+)
+elects_union <- st_read(
+    "output/clean_data/elects_union_clean.gpkg"
+)
+species <- st_read(
+    "output/clean_data/species_clean.gpkg"
+)
+postcodes <- st_read(
+    "output/clean_data/postcodes_clean.gpkg"
+)
+```
+
+## Table: Postcodes-elects
+
+The Threatened Australians web app is designed around showcasing which threatened species are found within which electorates. A simple way to connect users with their electorate is to ask for their postcode and have a table that links the two. For the postcodes that cross two or more electorates, we implemented a intermediary step which requests the user to select their electorate from a list of available options.
+We spatially intersected the postcodes and CED data and calulcated the areas of each. This will allow us to filter out slight overlaps later-on.
+
+```{r, eval = FALSE}
+postcodes_elects_tbl <- postcodes %>%
+    select(!POA_area_sqkm) %>%
+    mutate(
+        POA_area_sqkm = units::set_units(st_area(.), km^2) %>%
+            as.numeric()
+    ) %>%
+    st_intersection(elects) %>%
+    st_make_valid() %>%
+    mutate(
+        POA_elect_int_area_sqkm = units::set_units(st_area(.), km^2) %>%
+            as.numeric()
+    ) %T>%
+    st_write(
+        dsn = "output/analysed_data/final/postcodes_elects_tbl.gpkg",
+        layer = "postcodes_elects_tbl", append = FALSE, delete_dsn = TRUE
+    )
+```
+
+## Table: Elects
+
+This table just needs to be pushed through to the next script.
+
+```{r, eval = FALSE}
+elects_tbl <- elects %T>%
+    st_write(
+        dsn = "output/analysed_data/final/elects_tbl.gpkg",
+        layer = "elects_tbl", append = FALSE, delete_dsn = TRUE
+    )
+```
+
+## Table: Species-elects
+
+The `species_elects_tbl` forms the basis of the major function of the web app. This table shows us which threatened species intersect with which electorates.
+`percent_range_within` is the proportion of each species range within within each electorate. This allows us to filter for endemism later. For example, the Southern Corroboree Frog (*Pseudophryne corroboree*) is found exclusively in Eden-Monaro. The attribute for this taxa will be == `1`.
+
+```{r, eval = FALSE}
+species_elects_tbl <- species %>%
+    st_intersection(elects) %>%
+    st_make_valid() %>%
+    mutate(
+        species_intersect_area_sqkm = units::set_units(st_area(.), km^2) %>%
+            as.numeric()
+    ) %>%
+    mutate(
+        percent_range_within = species_intersect_area_sqkm / species_range_area_sqkm
+    ) %T>%
+    st_write(
+        dsn = "output/analysed_data/final/species_elects_tbl.gpkg",
+        layer = "species_elects_tbl", append = FALSE, delete_dsn = TRUE
+    )
+```
+
+The unionised species data is used in for a Conversation article plot and not for the web app. It essentially allows us to calculate what proportion of each electorate (and consequently the incumbent's political affiliation [such as party or independent]) is threatened species range.
+
+```{r, eval = FALSE}
+species_union_elects <- species_union %>%
+    st_intersection(elects) %>%
+    st_make_valid() %>%
+    mutate(
+        elects_intersect_area_sqkm = units::set_units(st_area(.), km^2) %>%
+            as.numeric()
+    ) %T>%
+    st_write(
+        dsn = "output/analysed_data/final/species_union_elects.gpkg",
+        layer = "species_union_elects", append = FALSE, delete_dsn = TRUE
+    )
+```
+
+## Table: Species
+
+This table just needs to be pushed through to the next script.
+
+```{r, eval = FALSE}
+species_tbl <- species %T>%
+    st_write(
+        dsn = "output/analysed_data/final/species_tbl.gpkg",
+        layer = "species_tbl", append = FALSE, delete_dsn = TRUE
+    )
+```
