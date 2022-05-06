@@ -48,8 +48,8 @@ threats <- readxl::read_excel(
 animals_images <- read_csv(
     "data/animals_image_vetting/animals_image_vetting - ft_combined.csv"
 )
-animals_ft <- fromJSON(
-    "output/clean_data/animals_ft.json"
+species_ft <- fromJSON(
+    "output/clean_data/species_ft.json"
 )
 
 #### Clean: electoral ####
@@ -166,8 +166,9 @@ demo_clean <- demo %>%
 
 #### Filter: species - freshwater and terrestrial ####
 
-species_FT_animals_clean <- species %>%
+species_animals_clean <- species %>%
     st_set_geometry(NULL) %>%
+    inner_join(species_ft) %>%
     filter(
         taxon_kingdom %in% "Animalia"
     ) %>%
@@ -193,15 +194,23 @@ species_FT_animals_clean <- species %>%
             "Rhincodon typus", # Whale Shark
             "Thymichthys politus", # Red Handfish
             "Zearaja maugeana", # Maugean Skate, Port Davey Skate
-            "Thunnus maccoyii" # Southern Bluefin Tuna
+            "Thunnus maccoyii", # Southern Bluefin Tuna
+            "Diomedea antipodensis gibsoni" # Gibson's Albatross, whack geom
         )
     ) %T>%
     write_json(
-        "output/clean_data/species_FT_animals_clean.json"
+        "output/clean_data/species_animals_clean.json"
+    ) %T>%
+    write_csv(
+        "output/clean_data/species_animals_clean.csv"
     )
+
+animals_ft <- species_animals_clean %>%
+    select(taxon_ID)
 
 species_plants_clean <- species %>%
     st_set_geometry(NULL) %>%
+    inner_join(species_ft) %>%
     filter(
         taxon_kingdom %in% "Plantae"
     ) %T>%
@@ -214,8 +223,12 @@ species_plants_clean <- species %>%
         "output/clean_data/species_plants_clean.json"
     )
 
+plants_ft <- species_plants_clean %>%
+    select(taxon_ID)
+
 species_marine_clean <- species %>%
     st_set_geometry(NULL) %>%
+    # inner_join(species_ft) %>% # no filter as this is not necessary info
     filter(
         marine %in% c(
             "Listed", "Listed - overfly marine area"
@@ -308,7 +321,10 @@ threats_collapsed_clean <- threats_clean %>%
     summarise(
         threat_ID_collapsed = paste(threat_ID, collapse = ", ")
     ) %>%
-    ungroup() %T>%
+    ungroup() %>%
+    mutate(
+        taxon_ID = as.double(taxon_ID)
+    ) %T>%
     write_json(
         "output/clean_data/threats_collapsed_clean.json"
     )
@@ -396,6 +412,7 @@ animals_info_clean <- animals_info_vetted %>%
 #### Clean: images ####
 
 animals_images_clean <- animals_images %>%
+    inner_join(animals_ft) %>% # this is because of removing albo
     select(
         taxon_ID, ALA_URL,
         ALA_API_image_URL, alt_URL
@@ -441,6 +458,9 @@ animals_images_clean <- animals_images %>%
             alt_URL, ALA_API_image_URL,
         )
     ) %T>%
+    write_csv(
+        "output/clean_data/animals_images_clean.csv"
+    )
     write_json(
         "output/clean_data/animals_images_clean.json"
     )

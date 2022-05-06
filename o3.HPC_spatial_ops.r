@@ -11,16 +11,19 @@ library(units)
 #### Import: Australia, electorates, species, demography ####
 
 elects <- st_read(
-    "/QRISdata/Q4107/digital_platform/output/clean_data/elects_clean.gpkg"
+    "/QRISdata/Q4107/threatened_australians/output/clean_data/elects_clean.gpkg"
 )
 elects_union <- st_read(
-    "/QRISdata/Q4107/digital_platform/output/clean_data/elects_union_clean.gpkg"
+    "/QRISdata/Q4107/threatened_australians/output/clean_data/elects_union_clean.gpkg"
 )
 species <- st_read(
-    "/QRISdata/Q4107/digital_platform/output/clean_data/species_clean.gpkg"
+    "/QRISdata/Q4107/threatened_australians/output/clean_data/species_clean.gpkg"
 )
+species_union <- st_read(
+    "/QRISdata/Q4107/threatened_australians/output/clean_data/species_union_clean.gpkg"
+    )
 postcodes <- st_read(
-    "/QRISdata/Q4107/digital_platform/output/clean_data/postcodes_clean.gpkg"
+    "/QRISdata/Q4107/threatened_australians/output/clean_data/postcodes_clean.gpkg"
 )
 
 #### Postcodes-electorate: table ####
@@ -38,7 +41,7 @@ postcodes_elects_tbl <- postcodes %>%
             as.numeric()
     ) %T>%
     st_write(
-        dsn = "/QRISdata/Q4107/digital_platform/output/analysed_data/final/postcodes_elects_tbl.gpkg",
+        dsn = "/QRISdata/Q4107/threatened_australians/output/analysed_data/final/postcodes_elects_tbl.gpkg",
         layer = "postcodes_elects_tbl", append = FALSE, delete_dsn = TRUE
     )
 
@@ -46,7 +49,7 @@ postcodes_elects_tbl <- postcodes %>%
 
 elects_tbl <- elects %T>%
     st_write(
-        dsn = "/QRISdata/Q4107/digital_platform/output/analysed_data/final/elects_tbl.gpkg",
+        dsn = "/QRISdata/Q4107/threatened_australians/output/analysed_data/final/elects_tbl.gpkg",
         layer = "elects_tbl", append = FALSE, delete_dsn = TRUE
     )
 
@@ -63,7 +66,7 @@ species_elects_tbl <- species %>%
         percent_range_within = species_intersect_area_sqkm / species_range_area_sqkm
     ) %T>%
     st_write(
-        dsn = "/QRISdata/Q4107/digital_platform/output/analysed_data/final/species_elects_tbl.gpkg",
+        dsn = "/QRISdata/Q4107/threatened_australians/output/analysed_data/final/species_elects_tbl.gpkg",
         layer = "species_elects_tbl", append = FALSE, delete_dsn = TRUE
     )
 
@@ -75,7 +78,7 @@ species_union_elects <- species_union %>%
             as.numeric()
     ) %T>%
     st_write(
-        dsn = "/QRISdata/Q4107/digital_platform/output/analysed_data/final/species_union_elects.gpkg",
+        dsn = "/QRISdata/Q4107/threatened_australians/output/analysed_data/final/species_union_elects.gpkg",
         layer = "species_union_elects", append = FALSE, delete_dsn = TRUE
     )
 
@@ -83,6 +86,6 @@ species_union_elects <- species_union %>%
 
 species_tbl <- species %T>%
     st_write(
-        dsn = "/QRISdata/Q4107/digital_platform/output/analysed_data/final/species_tbl.gpkg",
+        dsn = "/QRISdata/Q4107/threatened_australians/output/analysed_data/final/species_tbl.gpkg",
         layer = "species_tbl", append = FALSE, delete_dsn = TRUE
     )

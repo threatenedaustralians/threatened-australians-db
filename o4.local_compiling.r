@@ -43,11 +43,11 @@ threats_collapsed <- fromJSON(
     "output/clean_data/threats_collapsed_clean.json"
 )
 animals <- fromJSON(
-    "output/clean_data/species_FT_animals_clean.json"
+    "output/clean_data/species_animals_ft_clean.json"
 ) %>%
     select(taxon_ID)
 plants <- fromJSON(
-    "output/clean_data/species_plants_clean.json"
+    "output/clean_data/species_plants_ft_clean.json"
 ) %>%
     select(taxon_ID)
 animals_images <- fromJSON(
@@ -66,7 +66,7 @@ animals_info <- fromJSON(
 #### Import: other ####
 
 action_groups <- fromJSON(
-    "raw_data/action_groups.json"
+    "data/action_groups.json"
 )
 
 #### Animals_filter ####
@@ -75,9 +75,9 @@ species_ft <- species_elects %>%
     st_set_geometry(NULL) %>%
     group_by(taxon_ID) %>%
     summarise() %>%
+    ungroup() %>%
     inner_join(threats_collapsed) %>%
-    select(taxon_ID) %>%
-    mutate(taxon_ID = as.character(taxon_ID)) %T>%
+    select(taxon_ID) %T>%
     write_json(
         "output/clean_data/species_ft.json"
     )
@@ -147,6 +147,35 @@ animals_elects_tbl <- species_elects %>%
         layer = "animals_elects_tbl", append = FALSE, delete_dsn = TRUE
     )
 
+animals_elects_ref_tbl <- species_elects %>%
+    mutate(
+        across(
+            c(
+                species_range_area_sqkm,
+                species_intersect_area_sqkm,
+                percent_range_within
+            ),
+            signif,
+            digits = 3
+        )
+    ) %>%
+    group_by(
+        taxon_ID
+    ) %>%
+    mutate(species_range_intersects_with_n_electorates = n_distinct(electorate)) %>%
+    ungroup() %>%
+    select(
+        taxon_ID, electorate, scientific_name,
+        vernacular_name, threatened_status, species_range_intersects_with_n_electorates,
+        species_range_area_sqkm, species_intersect_area_sqkm, percent_range_within, geom
+    ) %>%
+    inner_join(species_ft) %>%
+    inner_join(animals) %>%
+    st_set_geometry(NULL) %T>%
+    write_csv(
+        "output/analysed_data/ref_tables/animals_elects_ref_tbl.csv"
+    )
+
 plants_elects_tbl <- species_elects %>%
     st_set_geometry(NULL) %>%
     inner_join(plants) %>%
@@ -165,13 +194,38 @@ plants_elects_tbl <- species_elects %>%
         )
     ) %>%
     select(
-        taxon_ID, scientific_name_clean, electorate,
-        vernacular_name_first_clean, threatened_status,
+        taxon_ID, # scientific_name_clean,
+        electorate,
+        scientific_name, vernacular_name, # vernacular_name_first_clean,
+        threatened_status,
         SPRAT_profile
     ) %>%
     relocate(electorate, .after = SPRAT_profile) %T>%
     write_json(
         "output/analysed_data/final/imports/plants_elects_tbl.json"
+    )
+
+plants_elects_ref_tbl <- species_elects %>%
+    mutate(
+        across(
+            percent_range_within
+            ,
+            signif,
+            digits = 3
+        )
+    ) %>%
+    st_set_geometry(NULL) %>%
+    inner_join(plants) %>%
+    select(
+        taxon_ID, # scientific_name_clean,
+        electorate,
+        scientific_name, vernacular_name, # vernacular_name_first_clean,
+        threatened_status,
+        percent_range_within,
+        SPRAT_profile
+    ) %T>%
+    write_csv(
+        "output/analysed_data/ref_tables/plants_elects_ref_tbl.csv"
     )
 
 #### Species_tbl ####
@@ -229,6 +283,12 @@ animals_tbl <- species %>%
 
 #### Elects_tbl ####
 
+species_elects_counts <- species_elects %>%
+    st_set_geometry(NULL) %>%
+    inner_join(species_ft) %>%
+    group_by(electorate) %>%
+    summarise(no_species = n_distinct(taxon_ID))
+
 animals_elects_counts <- species_elects %>%
     st_set_geometry(NULL) %>%
     inner_join(animals) %>%
@@ -247,8 +307,9 @@ elects_tbl <- elects %>%
     inner_join(demo) %>%
     inner_join(MP_info) %>%
     inner_join(MP_voting_info) %>%
+    full_join(species_elects_counts) %>%
     inner_join(animals_elects_counts) %>%
-    full_join(plants_elects_counts) %>%
+    full_join(plants_elects_counts) %>% # Not all elects have plants
     mutate(
         across(
             electorate_area_sqkm,
@@ -259,6 +320,10 @@ elects_tbl <- elects %>%
     st_write(
         "output/analysed_data/final/imports/elects_tbl.geojson",
         layer = "elects_tbl", append = FALSE, delete_dsn = TRUE
+    ) %>%
+    st_set_geometry(NULL) %T>%
+    write_csv(
+        "output/analysed_data/ref_tables/elects_tbl.csv"
     )
 
 #### Postcodes ####
@@ -282,6 +347,9 @@ postcodes_elects_tbl <- postcodes_elects %>%
     ) %T>%
     write_json(
         "output/analysed_data/final/imports/postcodes_elects_tbl.json"
+    ) %T>%
+    write_csv(
+        "output/analysed_data/ref_tables/postcodes_elects_ref_tbl.csv"
     )
 
 #### Action_groups_tbl ####
