@@ -68,7 +68,14 @@ species_animals_clean <- species %>%
             "Thymichthys politus", # Red Handfish
             "Zearaja maugeana", # Maugean Skate, Port Davey Skate
             "Thunnus maccoyii", # Southern Bluefin Tuna
-            "Diomedea antipodensis gibsoni" # Gibson's Albatross, whack geom
+            "Diomedea antipodensis gibsoni", # Gibson's Albatross, whack geom
+            "Diomedea antipodensis", # Antipodean Albatross
+            "Pachyptila turtur subantarctica", # Fairy Prion (southern)
+            "Thalassarche salvini", # Salvin's Ablatross
+            "Thalassarche steadi", # White-capped Albatross
+            "Thalassarche eremita", # Chatham Albatross
+            "Diomedea sanfordi", # Northern Royal Albatross
+            "Diomedea epomophora" # Southern Royal Albatross
         )
     ) %T>%
     write_json(
