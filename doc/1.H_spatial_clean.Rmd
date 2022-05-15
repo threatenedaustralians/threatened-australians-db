@@ -1,19 +1,18 @@
 ---
-title: Cleaning the spatial data
+title: Cleaning the attributes of the spatial data
 author: Gareth Kindler
 output:
     html_document:
         code_folding: show
 ---
 
-This document details the cleaning of the data that has spatial attributes relevant to the Threatened Australians (threatened.org.au) project. It is the first of four documents.
+This document details the cleaning of the data that has spatial attributes for the Threatened Australians (threatened.org.au) project.
 
 I run this code on a HPC as it speeds things up for me but it can run fine locally.
-For this reason I've set the code chunks to not evaluate. You can find the R script version of document in the `~/scripts` directory.
 
 ## Libraries
 
-```{r, eval = FALSE, class.source = 'fold-hide'}
+```{r, class.source = 'fold-hide'}
 library(tidyverse)
 library(sf)
 library(magrittr)
@@ -29,10 +28,10 @@ Commonwealth Electoral Divisions (CEDs) data comes form the Australian Electoral
 
 We've used the 2019 CEDs data as the incumbents represent those boundaries. Post election we'll be updating the web app to use the 2021/22 boundaries.
 
-```{r, eval = FALSE}
+```{r}
 elects <- st_read(
-    # "~/data/2021-Cwlth_electoral_boundaries_ESRI/2021_ELB_region.shp"
-    "~/data/AEC_electoral_boundaries_2019/COM_ELB_region.shp"
+    # "/QRISdata/Q4107/threatened_australians/data/2021-Cwlth_electoral_boundaries_ESRI/2021_ELB_region.shp"
+    "/QRISdata/Q4107/threatened_australians/data/AEC_electoral_boundaries_2019/COM_ELB_region.shp"
 )
 ```
 
@@ -40,17 +39,17 @@ elects <- st_read(
 
 We've used public grids of the *Species of National Environmental Significance (SNES)* Database which contains range maps/distributions of species listed as threatened on the *Environment Protection and Biodiversity Conservation Act 1999 (EPBC Act)*. This website and consequent links to the data can be found [here](https://www.awe.gov.au/environment/environmental-information-data/databases-applications/snes).
 
-```{r, eval = FALSE}
+```{r}
 species <- st_read(
-    "~/data/SNES_public_1july2021.gdb"
+    # "/QRISdata/Q4107/threatened_australians/data/SNES_public_1july2021.gdb"
+    "/QRISdata/Q4107/threatened_australians/data/snes_public_grids_07March2022_shapefile"
 )
 ```
-
 ## Clean: Electoral
 
-The CED data includes some errors that will mess with joins that we do later on as we are using electorate names (Elect-div) as the key.
+The CED data includes some errors that will mess with joins that we do later on as we are using electorate names (`Elect-div`) as the key.
 
-```{r, eval = FALSE}
+```{r}
 elects$Elect_div <- gsub("Eden-monaro", "Eden-Monaro", elects$Elect_div)
 elects$Elect_div <- gsub("Mcewen", "McEwen", elects$Elect_div)
 elects$Elect_div <- gsub("Mcmahon", "McMahon", elects$Elect_div)
@@ -58,9 +57,9 @@ elects$Elect_div <- gsub("Mcpherson", "McPherson", elects$Elect_div)
 elects$Elect_div <- gsub("O'connor", "O'Connor", elects$Elect_div)
 ```
 
-Remove unncessary rows and do a fresh caluclation of electorate size as this will be used for comparisons.
+Remove unncessary rows and do a fresh caluclation of electorate size.
 
-```{r, eval = FALSE}
+```{r}
 elects_clean <- elects %>%
     st_make_valid() %>%
     select(
@@ -74,20 +73,20 @@ elects_clean <- elects %>%
             as.numeric()
     ) %T>%
     st_write(
-        "~/output/clean_data/elects_clean.gpkg",
+        "/QRISdata/Q4107/threatened_australians/output/clean_data/elects_clean.gpkg",
         layer = "elects_clean", append = FALSE, delete_dsn = TRUE
     )
 ```
 
-Although unionised electorate data is not part of the project. Having it to compare and play with is useful. I've kept it in.
+Although unionised electorate data is not part of the project. Having it to compare and play with is useful.
 
-```{r, eval = FALSE}
+```{r}
 elects_union_clean <- elects_clean %>%
     st_union(by_feature = FALSE) %>%
     st_sf() %>%
     st_make_valid() %T>%
     st_write(
-        "~/output/clean_data/elects_union_clean.gpkg",
+        "/QRISdata/Q4107/threatened_australians/output/clean_data/elects_union_clean.gpkg",
         layer = "elects_union_clean", append = FALSE, delete_dsn = TRUE
     )
 ```
@@ -100,42 +99,41 @@ The metadata of the public grid SNES data states:
 > 2- Species or species habitat is likely to occur within area\
 > 1- Species or species habitat may occur within area
 
-In the SNES data this is denoted as the `PRESENCE_RANK` attribute. We used "species or species habitat is likely to occur within area" distributions as this is the more definitive (than "may occur") and represents the area of occupancy (AOO) as opposed to extent of occurrence (EOO) (Gaston & Fuller, 2009).
+In the SNES data this is denoted as the `PRES_RANK` attribute. We used "species or species habitat is likely to occur within area" distributions as this is the more definitive (than "may occur") and represents the area of occupancy (AOO) as opposed to extent of occurrence (EOO) (Gaston & Fuller, 2009).
 
 We removed species with an undefined threatened_status and summarised by unique identifiers to remove duplicated rows/geometries.
 
 The spelling mistake of *Rutidosis leptorhynchoides* was corrected by changing it to *Rutidosis leptorrhynchoides*.
 
-We automated the cleaning process of the `scientific_name` and `vernacular_name` as there was a bit of boilerplate text hanging around.
+We automated the cleaning process of the `scientific_name` and `vernacular_name` as there was a bit of extra text hanging around.
 
-```{r, eval = FALSE}
-#### Clean: Species ####
-
+```{r}
 species_clean <- species %>%
     filter(
-        PRESENCE_RANK == 2
+        PRES_RANK == 2
     ) %>%
-    filter(
-        !is.na(THREATENED_STATUS)
-    ) %>%
-    select(c(
-        "LISTED_TAXON_ID", "SCIENTIFIC_NAME", "VERNACULAR_NAME",
-        "THREATENED_STATUS", "MIGRATORY_STATUS", "MARINE",
-        "CETACEAN", "TAXON_GROUP", "SPRAT_PROFILE",
-        "TAXON_KINGDOM", "Shape"
-    )) %>%
     rename(
-        taxon_ID = LISTED_TAXON_ID,
-        scientific_name = SCIENTIFIC_NAME,
-        vernacular_name = VERNACULAR_NAME,
-        threatened_status = THREATENED_STATUS,
-        migratory_status = MIGRATORY_STATUS,
+        taxon_ID = LISTED_ID,
+        scientific_name = SCI_NAME,
+        vernacular_name = COMM_NAME,
+        threatened_status = THREATENED,
+        migratory_status = MIGRATORY,
         marine = MARINE,
         cetacean = CETACEAN,
-        taxon_group = TAXON_GROUP,
-        taxon_kingdom = TAXON_KINGDOM,
-        SPRAT_profile = SPRAT_PROFILE,
-        geometry = Shape
+        taxon_group = TAX_GROU,
+        taxon_kingdom = TAX_KING,
+        SPRAT_profile = SPRAT
+    ) %>%
+    select(
+        c(
+            "taxon_ID", "scientific_name", "vernacular_name",
+            "threatened_status", "migratory_status", "marine",
+            "cetacean", "taxon_group", "SPRAT_profile",
+            "taxon_kingdom", "geometry"
+        )
+    ) %>%
+    filter(
+        !is.na(threatened_status)
     ) %>%
     st_make_valid() %>%
     group_by(
@@ -153,14 +151,6 @@ species_clean <- species %>%
     summarise() %>%
     ungroup() %>%
     st_make_valid() %>%
-    relocate(
-        taxon_ID, scientific_name,
-        vernacular_name, threatened_status,
-        migratory_status, marine,
-        cetacean, taxon_group,
-        taxon_kingdom, SPRAT_profile,
-        geometry
-    ) %>%
     # Check MW species name adjustment script
     mutate(
         scientific_name = replace(
@@ -196,32 +186,40 @@ species_clean <- species %>%
     mutate(
         species_range_area_sqkm = units::set_units(st_area(.), km^2) %>%
             as.numeric()
+    ) %>%
+    relocate(
+        taxon_ID, scientific_name, scientific_name_clean,
+        vernacular_name, vernacular_name_other, vernacular_name_first,
+        vernacular_name_first_clean, threatened_status,
+        migratory_status, marine, cetacean, taxon_group,
+        taxon_kingdom, SPRAT_profile, species_range_area_sqkm,
+        geometry
     ) %T>%
     st_write(
-        "~/output/clean_data/species_clean.gpkg",
+        "/QRISdata/Q4107/threatened_australians/output/clean_data/species_clean.gpkg",
         layer = "species_clean", append = FALSE, delete_dsn = TRUE
     )
 ```
 
 As the geometry attribute accounts for most of the data size, we removed it to create a reference file for ease of manipulation.
 
-```{r, eval = FALSE}
+```{r}
 species_clean_no_geom <- species_clean %>%
     st_set_geometry(NULL) %T>%
     write_json(
-        "~/output/clean_data/species_clean_no_geom.json"
+        "/QRISdata/Q4107/threatened_australians/output/clean_data/species_clean_no_geom.json"
     )
 ```
 
 The following code is relevant to figure creation used in the Conversation article. It is not needed for the web app analysis.
 
-```{r, eval = FALSE}
+```{r}
 species_union_clean <- species_clean %>%
     st_union(by_feature = FALSE) %>%
     st_sf() %>%
     st_make_valid() %T>%
     st_write(
-        "~/output/clean_data/species_union_clean.gpkg",
+        "/QRISdata/Q4107/threatened_australians/output/clean_data/species_union_clean.gpkg",
         layer = "species_union_clean", append = FALSE, delete_dsn = TRUE
     )
 ```

@@ -1,0 +1,171 @@
+---
+title: Cleaning the electoral data
+author: Gareth Kindler
+output:
+    html_document:
+        code_folding: show
+---
+
+This document details the cleaning of the electoral data for the Threatened Australians (threatened.org.au) project.
+
+## Libraries
+
+```{r, class.source = 'fold-hide'}
+library(tidyverse)
+library(sf)
+library(magrittr)
+library(jsonlite)
+library(units)
+library(readxl)
+library(stringr)
+library(rmapshaper)
+library(httpgd)
+```
+
+## Import: Electoral
+
+### Data key
+
+`MP_info`:
+Information about each Minister of Parliament (MP). Pulled from the Australian Parliament House API. Script for this can be found `~/scripts/MP_info/req_MP_info.py`
+
+`MP_voting_info`:
+Information about each MPs voting track record. Pulled from [They Vote For You](https://theyvoteforyou.org.au/) API. Script can be found at `~/scripts/MP_voting_info/req_MP_voting_info.py`
+
+`demo`:
+Demographic classification of Commonwealth Electoral Divisions (CEDs) was retrieved from the [Australian Electoral Commission (AEC)](https://www.aec.gov.au/Electorates/maps.htm).
+
+```{r}
+knitr::opts_knit$set(root.dir = "/tmp")
+MP_info <- fromJSON(
+    "data/MP_info.json"
+)
+MP_voting_info <- fromJSON(
+    "data/MP_voting_info.json"
+)
+demo <- readxl::read_xlsx(
+    "data/AEC_demographic-classification-1-january-2019/01-demographic-classification-as-at-1-january-2019.xlsx"
+)
+elects <- st_read(
+    "output/clean_data/elects_clean.gpkg"
+)
+```
+
+## Clean: Electoral
+
+### MP information
+
+Mr Nick Champion MP was "elected to the House of Representatives for Spence, South Australia following electoral redistribution, 2019. Resigned 22.2.2022.". As the APH API did not include Nick Champion as a member anymore, we added him back in.
+
+```{r}
+MP_info_clean <- MP_info %>%
+    mutate(
+        electorate = word(
+            .$representing, 1,
+            sep = ","
+        )
+    ) %>%
+    distinct() %>%
+    relocate(
+        electorate,
+        .after = representing
+    ) %>%
+    add_row(
+        MP_ID = "HW9",
+        full_name = "Mr Nicholas Champion",
+        titles = "NA",
+        representing = "Spence, South Australia",
+        electorate = "Spence", # can link to TVFY on electorate attribute
+        email_address = "NA",
+        Twitter_address = "NA",
+        Facebook_address = "NA",
+        image_URL = "https://www.aph.gov.au/api/parliamentarian/HW9/image",
+        former_member = as.logical("TRUE"),
+        date_elected = "2019-05-18T00:000:00"
+    ) %T>%
+    write_json(
+        "output/clean_data/MP_info_clean.json"
+    )
+```
+
+### MP voting information
+
+The data we pulled from TVFY API's came with two former MPs and a senator. We removed them, and replaced the data with neccessary information.
+These MPs and senators are:
+
+> [Nick Champion 10111](https://www.aph.gov.au/Senators_and_Members/Parliamentarian?MPID=HW9) \
+> [John McVeigh 10889](https://www.aph.gov.au/Senators_and_Members/Parliamentarian?MPID=125865) \
+> [David Feeney 10709](https://www.aph.gov.au/Senators_and_Members/Parliamentarian?MPID=I0O) \
+
+```{r}
+MP_voting_info_clean <- MP_voting_info %>%
+    # since we did an outer join in the py req script, we got two extra mems and the retired member for Spence
+    # we have to remove manually and replace
+    # we couldn't do an inner otherwise we lose the member for Spence
+    # John McVeigh 10889 - https://www.aph.gov.au/Senators_and_Members/Parliamentarian?MPID=125865
+    # David Feeney 10709 - https://www.aph.gov.au/Senators_and_Members/Parliamentarian?MPID=I0O
+    filter(
+        !ID %in% c(10111, 10889, 10709)
+    ) %>%
+    mutate(
+        party = replace(
+            party, party == "SPK", "Liberal Party"
+        )
+    ) %>%
+    mutate(
+        party = replace(
+            party, party == "CWM", "National Party"
+        )
+    ) %>%
+    add_row(
+        ID = NA,
+        first = "NA",
+        last = "NA",
+        house = "representatives",
+        electorate = "Spence", # can link to TVFY on electorate attribute
+        category = "NA",
+        party = "Australian Labor Party",
+        url = "NA"
+    ) %T>%
+    write_json(
+        "output/clean_data/MP_voting_info_clean.json"
+    )
+```
+
+### Demographic classification of the CEDs
+
+We cleaned up the data to be consistent and added in some acronyms.
+
+```{r}
+demo_clean <- demo %>%
+    rename(
+        state_territory = "State or territory",
+        demographic_class = "Demographic classification",
+        electorate = "Electoral division"
+    ) %>%
+    mutate(
+        state_territory = replace(
+            state_territory, state_territory == "ACT", "Australian Capital Territory"
+        )
+    ) %>%
+    mutate(
+        state_territory = replace(
+            state_territory, state_territory == "NT", "Northern Territory"
+        )
+    ) %>%
+    mutate(
+        state_territory_abbrev = case_when(
+            state_territory == "Australian Capital Territory" ~ "ACT",
+            state_territory == "New South Wales" ~ "NSW",
+            state_territory == "Northern Territory" ~ "NT",
+            state_territory == "Queensland" ~ "QLD",
+            state_territory == "South Australia" ~ "SA",
+            state_territory == "Tasmania" ~ "TAS",
+            state_territory == "Victoria" ~ "VIC",
+            state_territory == "Western Australia" ~ "WA"
+        )
+    ) %T>%
+    write_json(
+        "output/clean_data/demo_clean.json"
+    )
+```
