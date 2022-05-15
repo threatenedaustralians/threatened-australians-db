@@ -23,9 +23,6 @@ MP_voting_info <- fromJSON(
 elects <- st_read(
     "output/clean_data/elects_clean.gpkg"
 )
-postcodes <- st_read(
-    "data/POA_2021_AUST_GDA94_SHP/POA_2021_AUST_GDA94.shp"
-)
 demo <- readxl::read_xlsx(
     "data/AEC_demographic-classification-1-january-2019/01-demographic-classification-as-at-1-january-2019.xlsx"
 )
@@ -46,7 +43,7 @@ MP_info_clean <- MP_info %>%
     ) %>%
     add_row(
         MP_ID = "HW9",
-        full_name = "Nicholas David Champion",
+        full_name = "Mr Nicholas Champion",
         titles = "NA",
         representing = "Spence, South Australia",
         electorate = "Spence", # can link to TVFY on electorate attribute
