@@ -65,7 +65,7 @@ action_groups <- fromJSON(
 
 #### Species_elects_tbl: with range calcs ####
 
-animals_elects_tbl <- species_elects %>%
+species_elects_tbl <- species_elects %>%
     mutate(
         across(
             c(
@@ -120,54 +120,6 @@ animals_elects_tbl <- species_elects %>%
             taxon_ID
         )
     ) %>%
-    select(
-        taxon_ID, scientific_name_clean,
-        species_range_intersects_with_n_electorates,
-        species_range_area_sqkm, species_electorate_coverage, electorate,
-        species_intersect_area_sqkm, percent_range_within, geom
-    ) %>%
-    inner_join(animals_ft) %T>%
-    st_write(
-        "output/analysed_data/final/imports/animals_elects_tbl.geojson",
-        layer = "animals_elects_tbl", append = FALSE, delete_dsn = TRUE
-    )
-
-animals_elects_ref_tbl <- species_elects %>%
-    mutate(
-        across(
-            c(
-                species_range_area_sqkm,
-                species_intersect_area_sqkm,
-                percent_range_within
-            ),
-            signif,
-            digits = 3
-        )
-    ) %>%
-    group_by(
-        taxon_ID
-    ) %>%
-    mutate(species_range_intersects_with_n_electorates = n_distinct(electorate)) %>%
-    ungroup() %>%
-    mutate(
-        taxon_ID = as.integer(
-            taxon_ID
-        )
-    ) %>%
-    select(
-        taxon_ID, electorate, scientific_name,
-        vernacular_name, threatened_status, species_range_intersects_with_n_electorates,
-        species_range_area_sqkm, species_intersect_area_sqkm, percent_range_within, geom
-    ) %>%
-    inner_join(animals_ft) %>%
-    st_set_geometry(NULL) %T>%
-    write_csv(
-        "output/analysed_data/ref_tables/animals_elects_ref_tbl.csv"
-    )
-
-plants_elects_tbl <- species_elects %>%
-    st_set_geometry(NULL) %>%
-    inner_join(plants_ft) %>%
     mutate(
         vernacular_name_first_clean = replace(
             vernacular_name_first_clean,
@@ -183,24 +135,49 @@ plants_elects_tbl <- species_elects %>%
         )
     ) %>%
     mutate(
-        taxon_ID = as.integer(
-            taxon_ID
+        vernacular_name_first_clean = replace(
+            vernacular_name_first_clean,
+            vernacular_name_first_clean == "bluegrass",
+            "Bluegrass"
         )
-    ) %>%
+    )
+
+animals_elects_tbl <- species_elects_tbl %>%
+    inner_join(animals_ft) %>%
+    select(
+        taxon_ID, scientific_name_clean,
+        species_range_intersects_with_n_electorates,
+        species_range_area_sqkm, species_electorate_coverage, electorate,
+        species_intersect_area_sqkm, percent_range_within, geom
+    ) %T>%
+    st_write(
+        "output/analysed_data/final/imports/animals_elects_tbl.geojson",
+        layer = "animals_elects_tbl", append = FALSE, delete_dsn = TRUE
+    )
+
+plants_elects_tbl <- species_elects_tbl %>%
+    st_set_geometry(NULL) %>%
+    inner_join(plants_ft) %>%
     select(
         taxon_ID,
-        electorate,
         scientific_name_clean,
         vernacular_name_first_clean,
         threatened_status,
-        SPRAT_profile
-    ) %>%
-    relocate(electorate, .after = SPRAT_profile) %T>%
+        SPRAT_profile,
+        electorate
+    ) %T>%
     write_json(
         "output/analysed_data/final/imports/plants_elects_tbl.json"
     )
 
-plants_elects_ref_tbl <- species_elects %>%
+#### Reference table and individual tables for users to download ####
+
+species_ft <- animals_ft %>%
+    bind_rows(plants_ft)
+
+species_elects_ref_tbl <- species_elects_tbl %>%
+    st_set_geometry(NULL) %>%
+    inner_join(species_ft) %>%
     mutate(
         across(
             percent_range_within,
@@ -208,25 +185,35 @@ plants_elects_ref_tbl <- species_elects %>%
             digits = 3
         )
     ) %>%
-    st_set_geometry(NULL) %>%
-    inner_join(plants_ft) %>%
-    mutate(
-        taxon_ID = as.integer(
-            taxon_ID
-        )
-    ) %>%
+    full_join(demo) %>%
     select(
-        taxon_ID,
-        electorate,
-        scientific_name_clean,
-        vernacular_name_first_clean,
+        electorate, state_territory, electorate_area_sqkm,
+        taxon_ID, scientific_name,
+        # scientific_name_clean,
+        vernacular_name,
+        # vernacular_name_other, vernacular_name_first,
+        # vernacular_name_first_clean,
         threatened_status,
-        percent_range_within,
-        SPRAT_profile
+        migratory_status, marine, taxon_group, taxon_kingdom,
+        SPRAT_profile, species_range_area_sqkm,
+        species_intersect_area_sqkm, percent_range_within
     ) %T>%
     write_csv(
-        "output/analysed_data/ref_tables/plants_elects_ref_tbl.csv"
+        "output/analysed_data/ref_tables/species_elects_ref_tbl.csv"
     )
+
+write_elects_csv = function(data) {
+    write_csv(
+        data, paste0("/home/gareth/science/eSpace/threatened_australians/electorate_species_lists/",
+        unique(data$electorate), "_species_list.csv"
+        )
+    )
+    return(data)
+}
+
+species_elects_ref_tbl %>%
+    group_by(electorate) %>%
+    do(write_elects_csv(.))
 
 #### Species_tbl ####
 
@@ -291,13 +278,15 @@ animals_elects_counts <- species_elects %>%
     st_set_geometry(NULL) %>%
     inner_join(animals_ft) %>%
     group_by(electorate) %>%
-    summarise(no_animal_species = n_distinct(taxon_ID))
+    summarise(no_animal_species = n_distinct(taxon_ID)) %>%
+    ungroup()
 
 plants_elects_counts <- species_elects %>%
     st_set_geometry(NULL) %>%
     inner_join(plants_ft) %>%
     group_by(electorate) %>%
-    summarise(no_plant_species = n_distinct(taxon_ID))
+    summarise(no_plant_species = n_distinct(taxon_ID)) %>%
+    ungroup()
 
 elects_tbl <- elects %>%
     inner_join(demo) %>%
@@ -305,6 +294,11 @@ elects_tbl <- elects %>%
     inner_join(MP_voting_info) %>%
     inner_join(animals_elects_counts) %>%
     full_join(plants_elects_counts) %>% # Not all elects have plants
+    mutate(
+        no_plant_species = replace_na(
+            no_plant_species, 0
+        )
+    ) %>%
     mutate(
         across(
             electorate_area_sqkm,
@@ -368,3 +362,11 @@ threats_tbl <- threats %>%
     write_json(
         "output/analysed_data/final/imports/threats_tbl.json"
     )
+
+#### Copy to eSpace directory ####
+
+file.copy(
+    "/home/gareth/science/projects/electoral/threatened_australians/output/",
+    "/home/gareth/science/eSpace/threatened_australians/",
+    recursive = TRUE
+)
