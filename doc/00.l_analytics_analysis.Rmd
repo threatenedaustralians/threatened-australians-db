@@ -1,0 +1,291 @@
+---
+title: Analysis of the analytics data<br><h2>Threatened Australians (threatened.org.au)
+author: Gareth Kindler<br>The University of Queensland, Australia
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+    html_document:
+        code_folding: show
+---
+
+```{r setup, include=FALSE, fig.align='center', warning=FALSE, message=FALSE}
+# knitr::opts_chunk$set(echo = TRUE, comment = "#")
+# knitr::opts_knit$set(root.dir = "../")
+knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+```
+
+```{r Libraries, message=FALSE}
+library(tidyverse)
+library(sf)
+library(magrittr)
+library(jsonlite)
+library(units)
+library(readxl)
+library(stringr)
+library(plotly)
+library(googleanalyticsr)
+```
+
+# Import
+
+```{r import}
+path_report <- read.csv(
+  "data/TA_analytics/22-05-02_22-06-14_page_path_report.csv",
+  skip = 10020
+)
+title_report <- read.csv(
+  "data/TA_analytics/22-05-02_22-06-14_page_title_report.csv",
+  skip = 7331
+)
+elects <- fromJSON(
+  "output/clean_data/MP_info_clean.json"
+)
+```
+
+# Clean
+
+## Path report
+
+Clean all characters but do not distinguish between the pages yet such as species pages and electorates/action pages.
+
+TODO: Can't figure out why this was filtering out elect/action pages
+
+```{r clean}
+replacePeriodsWithScores <- function(x){
+  colnames(x) <- gsub(
+    "\\.",
+    "\\_",
+    colnames(x)
+  ); x
+}
+path_report_clean <- replacePeriodsWithScores(path_report)
+names(path_report_clean) <- tolower(names(path_report_clean))
+path_report_clean <- path_report_clean %>% 
+  rename(
+    page = page_path___query_string_and_screen_class,
+  ) %>% 
+  select(
+    page, views, users, views_per_user, average_engagement_time,
+    unique_user_scrolls, event_count
+  ) %>%
+  mutate(
+    page = str_remove_all(
+        .$page,
+        "\\/"
+      )
+  ) %>% 
+  mutate(
+    page = replace(
+      page, page == "", "home"
+    )
+  ) %>% 
+  mutate(
+    page = str_remove_all(
+        .$page,
+        coll("searchspecies?e=")
+    )
+  ) %>% 
+  mutate(
+    page = str_replace(
+      .$page,
+      "%20",
+      " "
+    )
+  ) %>% 
+  # mutate(
+  #   page = str_replace(
+  #     .$page,
+  #     "-",
+  #     " "
+  #   )
+  # ) %>% 
+  mutate(
+    page = str_replace(
+      .$page,
+      "%27",
+      "'"
+    )
+  )
+# Bit cooked, can't figure out how to extract electorate only
+filter(path_report_clean,
+  grepl(
+    "electorate?e=",
+    page
+  )
+)
+
+  filter(
+    !grepl(
+      "postcode|fbclid|mc_cid|?s=09|&p=0|wills&p=2|toWww|Fleafl|_sm_byp|Wrsdfight",
+           page)
+  )
+glimpse(path_report_clean)
+```
+
+## Title report
+
+```{r}
+replacePeriodsWithScores <- function(x){
+  colnames(x) <- gsub(
+    "\\.",
+    "\\_",
+    colnames(x)
+  ); x
+}
+title_report_clean <- replacePeriodsWithScores(title_report)
+names(title_report_clean) <- tolower(names(title_report_clean))
+title_report_clean <- title_report_clean %>% 
+  rename(
+    page_title = page_title_and_screen_class,
+  ) %>% 
+  select(
+    page_title, views, users, views_per_user, average_engagement_time,
+    unique_user_scrolls, event_count
+  ) %>%
+  mutate(
+    page_title = str_remove_all(
+        .$page_title,
+        coll(" - Threatened Australians")
+    )
+  ) %>% 
+  mutate(
+    page_title = str_replace(
+      .$page_title,
+      "Threatened Australians - find threatened species near you",
+      "Home"
+    )
+  )
+glimpse(title_report_clean)
+```
+
+# Analysis
+
+## Title
+
+### How to Help page
+
+Little data clean
+
+```{r}
+help_pg <- title_report_clean %>% 
+  filter(
+    str_detect(
+      page_title,
+      "Help"
+    )
+  ) %>% 
+  filter(
+    !str_detect(
+      page_title,
+      "wills"
+    )
+  ) %>%
+  mutate(
+    electorate = word(
+      page_title, 2, sep = fixed(" in ")
+    )
+  ) %>% 
+  relocate(
+    electorate,
+    .after = page_title
+  )
+glimpse(help_pg)
+```
+
+```{r}
+ggplotly(
+  ggplot(
+  help_pg
+) + aes(
+  x = reorder(electorate, -views),
+  y = views,
+  text = paste(
+    electorate
+  )
+) + geom_col()
+)
+```
+
+### Species pages
+
+Let's remove the How to Help pages and other misc items.
+
+```{r}
+species_pg <- title_report_clean %>% 
+  # mutate(
+  #   electorate = word(
+  #     page_title, 2, sep = fixed(" in ")
+  #   )
+  # ) %>% 
+  filter(
+    !str_detect(
+      page_title,
+      "Help|絶滅の危機に瀕|https://www.threatened.o|wills|ausztrálok|Survey|About|Resources|Browse|Choose|Home"
+    )
+  )
+```
+
+Let's plot the top 10 
+
+```{r}
+
+```
+
+
+
+# Species page focussed analysis
+
+```{r}
+species_report <- path_report_clean %>% 
+  mutate(
+    electorate = word(
+      page, 1, sep = fixed("&p=")
+    )
+  ) %>% 
+  filter(
+    !grepl(
+      "about|resources|home|feedback|electorate",
+           electorate)
+  ) %>%
+  group_by(electorate) %>%
+  summarise(
+    views = sum(views),
+    users = mean(users),
+    average_engagement_time = mean(average_engagement_time),
+    event_count = sum(event_count)
+  )
+```
+
+```{r}
+plot
+```
+
+# Electorate page analysis
+
+
+
+```{r}
+elects_report <- path_report_clean %>% 
+  # mutate(
+  #   electorate = word(
+  #     page, 1, sep = fixed("&p=")
+  #   )
+  # ) %>% 
+  filter(
+    grepl(
+      "electorate?e=",
+           page)
+  )
+```
+
+
+# Page focussed analysis
+
+```{r}
+
+```
+
+
+# Electorate and species analysis
+
+
+
