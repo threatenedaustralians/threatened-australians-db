@@ -1,10 +1,11 @@
 ---
-title: Analysis of the analytics data<br><h2>Threatened Australians (threatened.org.au)
+title: Brief exploration of the analytics and feedback data<br><h2>Threatened Australians (threatened.org.au)
 author: Gareth Kindler<br>The University of Queensland, Australia
 date: "`r format(Sys.time(), '%d %B, %Y')`"
 output:
     html_document:
         code_folding: show
+    word_document:
 ---
 
 ```{r setup, include=FALSE, fig.align='center', warning=FALSE, message=FALSE}
@@ -22,34 +23,98 @@ library(units)
 library(readxl)
 library(stringr)
 library(plotly)
-library(googleanalyticsr)
+library(googleAnalyticsR)
+library(forcats)
+library(reactable)
+library(readODS)
+library(naniar)
+library(viridis)
+library(ggridges)
 ```
 
-# Import
+# Data
+
+We've got two *data* that were produced by **Threatened Australians**, they are:
+
+1. Analytics data - this includes information on page views, clicks, users. This is information is collected via Google Analytics. It structures the data into different *reports* with a couple of dimensions for each. The ones I'm currently interested in are:
+* Engagement report - pages and screens viewed by users. This includes the number of times a specific page was viewed, how many users, how many events (e.g. clicks, scrolls). We're going to primarily work with this dataset.
+* Acquisition report - how we acquired traffic/users
+There are other reports such as demographics (kinda unreliable), and tech (what OS and devices people used to access)
+
+2. Feedback data - this is a single data frame with the answers to the feedback form
+
+# EDA Research questions
+
+## Analytics
+
+### Engagement
+
+* What were our top 20 X variable (e.g. views) pages? [int table]
+* How do X variable (e.g. views) VS electorate/species pages compare?
+* How do X variable (e.g. views) VS help pages compare?
+
+### Acquisiton
+
+* How did our traffic change over time? [line graph, users VS time]
+* What are the top traffic producers? [int table]
+* How do X variable (e.g. views) VS acquisition sources? [graph]
+
+## Feedback
+
+* How do categorical answers to the survey compare?
+* How do those answers compare between following the same user ID?
+* What are the answers to the long-answer questions?
+
+# Import 
+
+## From raw csv
 
 ```{r import}
-path_report <- read.csv(
-  "data/TA_analytics/22-05-02_22-06-14_page_path_report.csv",
-  skip = 10020
-)
-title_report <- read.csv(
-  "data/TA_analytics/22-05-02_22-06-14_page_title_report.csv",
+# path_report <- read.csv(
+#   "data/TA_analytics/22-05-02_22-06-14_page_path_report.csv",
+#   skip = 10020
+# )
+engag_title <- read.csv(
+  "data/TA_analytics/22-05-02_22-06-14_engagement_title.csv",
   skip = 7331
 )
-elects <- fromJSON(
-  "output/clean_data/MP_info_clean.json"
+acquis_time <- read.csv(
+  "data/TA_analytics/22-05-02_22-06-14_acquisition_traffic_source.csv",
+  skip = 8
+) %>% 
+  filter(
+    !row_number() >= 45)
+acquis_source <- read.csv(
+  "data/TA_analytics/22-05-02_22-06-14_acquisition_traffic_source.csv",
+  skip = 58
+) %>% 
+  filter(
+    !row_number() >= 105
+  )
+acquis_users <- read.csv(
+  "data/TA_analytics/22-05-02_22-06-14_acquisition_traffic_source.csv",
+  skip = 168
+)
+# elects <- fromJSON(
+#   "output/clean_data/MP_info_clean.json"
+# )
+demo <- fromJSON(
+    "output/clean_data/demo_clean.json"
+)
+feedback <- read_ods(
+  "data/TA_feedback_output/21-to-22-06-16_feedback.ods"
 )
 ```
+
+## From the GA API
+
+The typical package for this (`googleAnalyticsR`) was failing to get my account info (`ga_account_info()`) so I scrapped doing it this way, for the time being.
 
 # Clean
 
-## Path report
+## Analytics
 
-Clean all characters but do not distinguish between the pages yet such as species pages and electorates/action pages.
-
-TODO: Can't figure out why this was filtering out elect/action pages
-
-```{r clean}
+```{r functions}
 replacePeriodsWithScores <- function(x){
   colnames(x) <- gsub(
     "\\.",
@@ -57,83 +122,14 @@ replacePeriodsWithScores <- function(x){
     colnames(x)
   ); x
 }
-path_report_clean <- replacePeriodsWithScores(path_report)
-names(path_report_clean) <- tolower(names(path_report_clean))
-path_report_clean <- path_report_clean %>% 
-  rename(
-    page = page_path___query_string_and_screen_class,
-  ) %>% 
-  select(
-    page, views, users, views_per_user, average_engagement_time,
-    unique_user_scrolls, event_count
-  ) %>%
-  mutate(
-    page = str_remove_all(
-        .$page,
-        "\\/"
-      )
-  ) %>% 
-  mutate(
-    page = replace(
-      page, page == "", "home"
-    )
-  ) %>% 
-  mutate(
-    page = str_remove_all(
-        .$page,
-        coll("searchspecies?e=")
-    )
-  ) %>% 
-  mutate(
-    page = str_replace(
-      .$page,
-      "%20",
-      " "
-    )
-  ) %>% 
-  # mutate(
-  #   page = str_replace(
-  #     .$page,
-  #     "-",
-  #     " "
-  #   )
-  # ) %>% 
-  mutate(
-    page = str_replace(
-      .$page,
-      "%27",
-      "'"
-    )
-  )
-# Bit cooked, can't figure out how to extract electorate only
-filter(path_report_clean,
-  grepl(
-    "electorate?e=",
-    page
-  )
-)
-
-  filter(
-    !grepl(
-      "postcode|fbclid|mc_cid|?s=09|&p=0|wills&p=2|toWww|Fleafl|_sm_byp|Wrsdfight",
-           page)
-  )
-glimpse(path_report_clean)
 ```
 
-## Title report
+### Engagement
 
 ```{r}
-replacePeriodsWithScores <- function(x){
-  colnames(x) <- gsub(
-    "\\.",
-    "\\_",
-    colnames(x)
-  ); x
-}
-title_report_clean <- replacePeriodsWithScores(title_report)
-names(title_report_clean) <- tolower(names(title_report_clean))
-title_report_clean <- title_report_clean %>% 
+engag_title_clean <- replacePeriodsWithScores(engag_title)
+names(engag_title_clean) <- tolower(names(engag_title_clean))
+engag_title_clean <- engag_title_clean %>% 
   rename(
     page_title = page_title_and_screen_class,
   ) %>% 
@@ -153,20 +149,212 @@ title_report_clean <- title_report_clean %>%
       "Threatened Australians - find threatened species near you",
       "Home"
     )
+  ) %>% 
+  filter(
+    !str_detect(
+      page_title,
+      "絶滅の危機に瀕|https://www.threatened.o|wills|ausztrálok"
+    )
   )
-glimpse(title_report_clean)
+glimpse(engag_title_clean)
+```
+
+### Acquisition
+
+```{r}
+acquis_source_clean <- replacePeriodsWithScores(acquis_source)
+names(acquis_source_clean) <- tolower(names(acquis_source_clean))
+acquis_source_clean <- acquis_source_clean %>% 
+  mutate(
+    users = as.integer(users)
+  )
+
+names(acquis_time) <- tolower(names(acquis_time))
+names(acquis_time)[names(acquis_time) == 'x.direct.'] <- 'direct'
+date_range <- seq.Date(
+  as.Date("2022/05/02", tz = AEST), 
+  as.Date("2022/06/14", tz = AEST), 
+  "day")
+acquis_time$date <- date_range
+acquis_time_clean <- acquis_time %>% 
+  select(!day) %>% 
+  relocate(
+    date,
+    .before = direct
+  ) %>% 
+  rename(
+    abc = abc.net.au,
+    convo = theconversation.com,
+    facebook = m.facebook.com
+  )
+acquis_time_clean_long <- acquis_time_clean %>% 
+  pivot_longer(
+    cols = direct:facebook, 
+    names_to = "source",
+    values_to = "users"
+  ) %>% 
+  mutate(
+    users = as.integer(users)
+  )
+
+acquis_users_clean <- replacePeriodsWithScores(acquis_users)
+names(acquis_users_clean) <- tolower(names(acquis_users_clean))
+acquis_users_clean <- acquis_users_clean %>% 
+  select(
+    !c(conversions, total_revenue)
+  ) %>% 
+  rename(
+    source = session_source
+  ) %>% 
+  mutate(
+    users = as.integer(users)
+  )
+```
+
+## Feedback
+
+```{r}
+feedback_clean <- feedback %>% 
+  rename(
+    submission_id = submissionid,
+    key_takeaway = answer1,
+    actions_result = answer2,
+    actions_be = answer3,
+    easy_to_understand = answer4,
+    improvments_suggestions = answer5,
+    anything_else = answer6
+  ) %>% 
+  filter(
+    !str_detect(
+      key_takeaway,
+      "test|Test|выплат|готовы")
+  ) %>% 
+  filter(
+    !submission_id %in% c(1:11, 47:49)
+  )
+feedback_clean$actions_result <- factor(feedback_clean$actions_result,
+  levels = c("No", "Unsure", "Probably", "Yes"))
+feedback_clean$easy_to_understand <- factor(feedback_clean$easy_to_understand,
+  levels = c("Strongly disagree", "Disagree", "Neither agree or disagree", "Agree", "Strongly agree"))
+
+  # mutate(
+  #   across(
+  #     where(
+  #       is.character
+  #     ), ~na_if(., regex("[\S+]"))
+  #   )
+  # ) %>% 
+  # replace_with_na(
+  #   replace = list(
+  #     actions_result = ""
+  #   )
+  # )
+  # mutate(
+  #   across(
+  #     where(
+  #       is.character
+  #     ), trimws
+  #   )
+  # )
+# complete(feedback_clean)
+# 
+# feedback_clean$actions_result[feedback_clean$actions_result == " "] <- ""
+# 
+# x <- c("apple", "  ", " ", "")
+# str_detect(x, "^[\t]")
+# 
+# 
+# feedback_clean[feedback_clean$actions_result == " "]
+# 
+# str_replace()
+# 
+# 
+# apply(feedback_clean, c(1, 2), function(x) gsub("\\s", NA, x))
+
 ```
 
 # Analysis
 
-## Title
+## Analytics
 
-### How to Help page
+### Engagement
 
-Little data clean
+#### All data table
 
 ```{r}
-help_pg <- title_report_clean %>% 
+engag_title_clean %>% 
+  mutate(
+    across(
+      c(
+        views_per_user,
+        average_engagement_time
+      ),
+      signif,
+      digits = 3
+    )
+  ) %>% 
+  reactable()
+```
+
+#### Top ten viewed pages
+
+```{r}
+top_ten_pgs <- engag_title_clean %>% 
+  arrange(desc(views)) %>% 
+  slice(1:10)
+ggplotly(
+  ggplot(
+  top_ten_pgs
+) + aes(
+  x = fct_reorder(top_ten_pgs$page_title, top_ten_pgs$views),
+  # x = page_title,
+  y = views,
+  text = paste(
+    page_title
+  )
+) + geom_bar(
+  stat = 'identity'
+  ) + coord_flip()
+  + labs(
+    x = FALSE,
+    y = "Number of views"
+  )
+)
+```
+
+#### Species/electorate pages
+
+Let's remove the How to Help pages and other misc items.
+And add in demographic classification and state and territory the electorate is found within.
+
+```{r, message=FALSE}
+species_title <- engag_title_clean %>% 
+  filter(
+    !str_detect(
+      page_title,
+      "Help|Survey|About|Resources|Browse|Choose|Home"
+    )
+  ) %>% 
+  mutate(
+    vernacular_name = word(
+      page_title, 1, sep = fixed(" in ")
+    )
+  ) %>%
+  mutate(
+    electorate = word(
+      page_title, 2, sep = fixed(" in ")
+    )
+  ) %>%
+  full_join(., demo) %>% 
+  relocate(
+    page_title, electorate, state_territory, state_territory_abbrev, demographic_class, vernacular_name
+  )
+```
+
+#### Help pages
+
+```{r}
+help_title <- engag_title_clean %>% 
   filter(
     str_detect(
       page_title,
@@ -183,109 +371,214 @@ help_pg <- title_report_clean %>%
     electorate = word(
       page_title, 2, sep = fixed(" in ")
     )
-  ) %>% 
+  ) %>%
+  full_join(., demo) %>% 
   relocate(
-    electorate,
-    .after = page_title
+    page_title, electorate, state_territory, state_territory_abbrev, demographic_class
   )
-glimpse(help_pg)
+glimpse(help_title)
 ```
 
+Across the How to Help pages (once a user clicks on the 'How to Help' button, they get taken through to this page, it includes the 4 steps to make a difference specific to their electorate), we received `r sum(help_title$views)` views and `r sum(help_title$users)` users. This means out of the total users we had visit the home page, `r sum(help_title$users)/engag_title_clean[engag_title_clean$page_title == "Home", 3]*100`% made it to the How to Help page.
+
+These same pages produced the following state by state breakdown of users:
+
 ```{r}
+help_title %>% 
+  group_by(state_territory_abbrev) %>% 
+  summarise(sum_users = sum(users)) %>% 
+  arrange(desc(sum_users)) %>% 
+  reactable()
+```
+
+The electorate with the most users visit its How to Help page was `r arrange(help_title, desc(users))[1,"electorate"]` with `r arrange(help_title, desc(users))[1,"users"]`.
+
+Across all electorates, grouped next to their fellow electorates within each state and territory, we see the following breakdown:
+
+```{r}
+help_ordered <- help_title %>% 
+  # mutate(
+  #   state_territory_abbrev = factor(
+  #     state_territory_abbrev, levels = c(
+  #       "ACT", "NSW", "NT", "QLD", "SA", "TAS", "VIC", "WA"
+  #       )
+  #     )
+  #   ) %>%
+  arrange(state_territory_abbrev, desc(users)) %>% 
+  mutate(electorate = factor(electorate, unique(electorate)))
+# help_ordered$state_territory_abbrev <- fct_reorder(
+#   help_ordered$state_territory_abbrev, 
+#   help_ordered$users
+# )
 ggplotly(
-  ggplot(
-  help_pg
-) + aes(
-  x = reorder(electorate, -views),
-  y = views,
-  text = paste(
-    electorate
-  )
-) + geom_col()
+ggplot(help_ordered
+  ) + aes(
+    x = electorate,
+    y = users,
+    fill = state_territory_abbrev,
+    text = paste(
+      "Electorate:", electorate, 
+      "\nState or territory:", state_territory_abbrev,
+      "\nUsers:", users)
+  ) + geom_bar(
+    stat = "identity",
+    position = position_dodge(
+      0.1
+    )
+  ) +
+  scale_fill_viridis(
+    discrete = TRUE,
+    name = "State or territory"
+  ) + 
+  labs(
+    x = "Number of users"
+  ) + coord_flip() +
+  theme_classic() +
+    theme(
+      axis.title.y = element_blank(),
+      axis.text.y = element_blank(),
+      axis.ticks.y = element_blank()
+    )
+,
+  tooltip = "text"
 )
 ```
 
-### Species pages
+### Acquisition
 
-Let's remove the How to Help pages and other misc items.
+#### Traffic over time
+
+* How did our traffic change over time? [line graph, users VS time]
 
 ```{r}
-species_pg <- title_report_clean %>% 
-  # mutate(
-  #   electorate = word(
-  #     page_title, 2, sep = fixed(" in ")
-  #   )
-  # ) %>% 
+acquis_time_clean_long$source <- factor(acquis_time_clean_long$source, levels = c("direct", "convo", "abc", "google", "facebook"))
+ggplotly(
+  ggplot(
+  acquis_time_clean_long
+  ) + aes(
+    x = date,
+    y = users,
+    fill = source,
+    # text = source
+  ) + geom_area() +
+  scale_fill_viridis(
+    discrete = TRUE) +
+  # theme_ipsum() +
+  theme_minimal() +
+  theme(
+    legend.position = "none"
+  ) +
+  guides(
+        fill = "none"
+  ) +
+  labs(
+    x = NULL,
+    y = "Number of users"
+  ) + facet_wrap(
+    ~source,
+    ncol = 1
+  ),
+  # width = 450,
+  height = 600
+)
+```
+
+#### Traffic producers
+
+* What are the top traffic producers? [int table]
+
+```{r}
+acquis_source_clean %>% 
+  reactable()
+```
+
+#### How do X variable (e.g. views) VS acquisition sources? [graph]
+
+* How do X variable (e.g. views) VS acquisition sources? [graph]
+
+What is a meaningful X variable? av engagement time seems moderately meaningful but is this test even worth it?
+
+```{r}
+summary(acquis_users_clean)
+acquis_users_clean_plot <- acquis_users_clean %>% 
   filter(
-    !str_detect(
-      page_title,
-      "Help|絶滅の危機に瀕|https://www.threatened.o|wills|ausztrálok|Survey|About|Resources|Browse|Choose|Home"
+    sessions >= median(sessions)
+  )
+ggplotly(ggplot(acquis_users_clean_plot) +
+  aes(
+    x = source,
+    y = average_engagement_time_per_session,
+    text = paste("sessions = ", sessions)
+  ) +
+  geom_bar(
+    stat = "identity"
+  ) + 
+    labs(
+      y = "Average engagement time per session"
+    ) +
+    theme_minimal() +
+    theme(
+      axis.title.x = element_blank(),
+      axis.text.x = element_blank(),
+      axis.ticks.x = element_blank()
     )
-  )
+)
 ```
 
-Let's plot the top 10 
+## Feedback
+
+Q: What was your key takeaway from the Threatened Australians web app?
 
 ```{r}
-
+feedback_clean %>% 
+  select(key_takeaway) %>% 
+  reactable()
 ```
 
-
-
-# Species page focussed analysis
+Q: Are you going to take any actions as a result of using the web app?
+<!-- A (options): Yes, No, Probably, Unsure -->
 
 ```{r}
-species_report <- path_report_clean %>% 
-  mutate(
-    electorate = word(
-      page, 1, sep = fixed("&p=")
-    )
-  ) %>% 
-  filter(
-    !grepl(
-      "about|resources|home|feedback|electorate",
-           electorate)
-  ) %>%
-  group_by(electorate) %>%
-  summarise(
-    views = sum(views),
-    users = mean(users),
-    average_engagement_time = mean(average_engagement_time),
-    event_count = sum(event_count)
-  )
+feedback_clean %>% 
+  ggplot() +
+  aes(x = actions_result) +
+  geom_bar()
 ```
+
+Q: What would those actions be?
 
 ```{r}
-plot
+feedback_clean %>% 
+  select(actions_be) %>% 
+  reactable()
 ```
 
-# Electorate page analysis
-
-
+Q: The information on this website was easy to understand:
+<!-- A (options): Strongly disagree, Disagree, Neither agree or disagree, Agree, Strongly agree -->
 
 ```{r}
-elects_report <- path_report_clean %>% 
-  # mutate(
-  #   electorate = word(
-  #     page, 1, sep = fixed("&p=")
-  #   )
-  # ) %>% 
-  filter(
-    grepl(
-      "electorate?e=",
-           page)
-  )
+feedback_clean %>% 
+  ggplot() +
+  aes(x = easy_to_understand) +
+  geom_bar()
 ```
 
 
-# Page focussed analysis
+Q: Do you have any suggestions for ways that we might improve the project?
 
 ```{r}
-
+feedback_clean %>% 
+  select(improvments_suggestions) %>% 
+  reactable()
 ```
 
 
-# Electorate and species analysis
+Q: Is there anything else that you would like to share with us? 
 
+```{r}
+feedback_clean %>% 
+  select(anything_else) %>% 
+  reactable()
+```
 
 
