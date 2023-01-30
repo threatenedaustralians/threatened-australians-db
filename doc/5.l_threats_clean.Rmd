@@ -1,16 +1,20 @@
 ---
-title: Cleaning the threat dataset
-author: Gareth Kindler
+title: Cleaning the threat dataset<br><h2>Threatened Australians (threatened.org.au)
+author: Gareth Kindler<br>The University of Queensland, Australia
+date: "`r format(Sys.time(), '%d %B, %Y')`"
 output:
     html_document:
         code_folding: show
 ---
 
-This document details the cleaning of the threat data for to the Threatened Australians (threatened.org.au) project.
+```{r setup, include=FALSE, fig.align='center', warning=FALSE, message=FALSE}
+# knitr::opts_chunk$set(echo = TRUE, comment = "#")
+knitr::opts_knit$set(root.dir = "../")
+```
 
 ## Libraries
 
-```{r, eval = FALSE, class.source = 'fold-hide'}
+```{r, class.source = 'fold-hide'}
 library(tidyverse)
 library(sf)
 library(magrittr)
@@ -38,6 +42,9 @@ threats <- readxl::read_excel(
 )
 species <- st_read(
     "output/clean_data/species_clean.gpkg"
+)
+species_ft <- read_json(
+    "output/clean_data/species_ft.json"
 )
 ```
 
@@ -71,10 +78,16 @@ threats_clean <- threats %>%
     rename(
         scientific_name = species_name_adjusted
     ) %>%
-    inner_join(species) %>%
+    full_join(species) |>
     select(
         taxon_ID, broad_level_threat
     ) %>%
+    mutate(
+        broad_level_threat = replace_na(
+            broad_level_threat,
+            "No easily accessible threat information was found for this species. This does not mean there is no information out there. We encourage you to do a web search using the scientific latin name."
+        )
+    ) |>
     mutate(
         threat_ID =
             case_when(
@@ -85,21 +98,10 @@ threats_clean <- threats %>%
                 broad_level_threat == "Habitat loss, fragmentation and degradation" ~ "T05",
                 broad_level_threat == "Invasive species and diseases" ~ "T06",
                 broad_level_threat == "Overexploitation and other direct harm from human activities" ~ "T07",
-                broad_level_threat == "Pollution" ~ "T08"
+                broad_level_threat == "Pollution" ~ "T08",
+                TRUE ~ "T09"
             )
     ) %T>%
-    # mutate(
-    #     broad_level_threat_alt =
-    #         case_when(
-    #             broad_level_threat == "Adverse fire regimes" ~ "Adverse fire regimes",
-    #             broad_level_threat == "Changed surface and groundwater regimes" ~ "Changed surface and groundwater regimes",
-    #             broad_level_threat == "Climate change and severe weather" ~ "Climate change and severe weather",
-    #             broad_level_threat == "Disrupted ecosystem and population processes" ~ "Disrupted ecosystem and population processes",
-    #             broad_level_threat == "Habitat destruction, fragmentation and degradation" ~ "Habitat loss, fragmentation and degradation",
-    #             broad_level_threat == "Invasive species and diseases" ~ "Invasive species and diseases",
-    #             broad_level_threat == "Overexploitation and other direct harm from human activities" ~ "Overexploitation and other direct harm from human activities",
-    #             broad_level_threat == "Pollution" ~ "Pollution"
-    #         )
     write_json(
         "output/clean_data/threats_clean.json"
     )

@@ -1,15 +1,12 @@
-# Simplified data to experiment on before mounting on the HPC with the real data
-
-#### Libraries ####
-
+## ---- class.source = 'fold-hide'--------------------------------------------------
 library(tidyverse)
 library(sf)
 library(jsonlite)
 library(magrittr)
 library(units)
 
-#### Import: Australia, electorates, species, demography ####
 
+## ---------------------------------------------------------------------------------
 elects <- st_read(
     "/QRISdata/Q4107/threatened_australians/output/clean_data/elects_clean.gpkg"
 )
@@ -26,8 +23,8 @@ postcodes <- st_read(
     "/QRISdata/Q4107/threatened_australians/data/POA_2021_AUST_GDA94_SHP/POA_2021_AUST_GDA94.shp"
 )
 
-#### Postcodes-electorate: table ####
 
+## ---------------------------------------------------------------------------------
 postcodes_elects_tbl <- postcodes %>%
     select(
         POA_CODE21, geometry
@@ -53,6 +50,8 @@ postcodes_elects_tbl <- postcodes %>%
         layer = "postcodes_elects_tbl", append = FALSE, delete_dsn = TRUE
     )
 
+
+## ---------------------------------------------------------------------------------
 species_elects_tbl <- species %>%
     st_intersection(elects) %>%
     st_make_valid() %>%
@@ -68,6 +67,8 @@ species_elects_tbl <- species %>%
         layer = "species_elects_tbl", append = FALSE, delete_dsn = TRUE
     )
 
+
+## ---------------------------------------------------------------------------------
 species_union_elects <- species_union %>%
     st_intersection(elects) %>%
     st_make_valid() %>%
@@ -79,3 +80,4 @@ species_union_elects <- species_union %>%
         dsn = "/QRISdata/Q4107/threatened_australians/output/analysed_data/final/species_union_elects.gpkg",
         layer = "species_union_elects", append = FALSE, delete_dsn = TRUE
     )
+

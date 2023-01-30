@@ -1,12 +1,11 @@
 ---
-title: Cleaning the attributes of the spatial data
-author: Gareth Kindler
+title: Cleaning the attributes of the spatial data<br><h2>Threatened Australians (threatened.org.au)
+author: Gareth Kindler<br>The University of Queensland, Australia
+date: "`r format(Sys.time(), '%d %B, %Y')`"
 output:
     html_document:
         code_folding: show
 ---
-
-This document details the cleaning of the data that has spatial attributes for the Threatened Australians (threatened.org.au) project.
 
 I run this code on a HPC as it speeds things up for me but it can run fine locally.
 
@@ -30,8 +29,7 @@ We've used the 2019 CEDs data as the incumbents represent those boundaries. Post
 
 ```{r}
 elects <- st_read(
-    # "/QRISdata/Q4107/threatened_australians/data/2021-Cwlth_electoral_boundaries_ESRI/2021_ELB_region.shp"
-    "/QRISdata/Q4107/threatened_australians/data/AEC_electoral_boundaries_2019/COM_ELB_region.shp"
+    "/QRISdata/Q4107/threatened_australians/data/2021-Cwlth_electoral_boundaries_ESRI/2021_ELB_region.shp"
 )
 ```
 
@@ -41,21 +39,11 @@ We've used public grids of the *Species of National Environmental Significance (
 
 ```{r}
 species <- st_read(
-    # "/QRISdata/Q4107/threatened_australians/data/SNES_public_1july2021.gdb"
     "/QRISdata/Q4107/threatened_australians/data/snes_public_grids_07March2022_shapefile"
 )
 ```
+
 ## Clean: Electoral
-
-The CED data includes some errors that will mess with joins that we do later on as we are using electorate names (`Elect-div`) as the key.
-
-```{r}
-elects$Elect_div <- gsub("Eden-monaro", "Eden-Monaro", elects$Elect_div)
-elects$Elect_div <- gsub("Mcewen", "McEwen", elects$Elect_div)
-elects$Elect_div <- gsub("Mcmahon", "McMahon", elects$Elect_div)
-elects$Elect_div <- gsub("Mcpherson", "McPherson", elects$Elect_div)
-elects$Elect_div <- gsub("O'connor", "O'Connor", elects$Elect_div)
-```
 
 Remove unncessary rows and do a fresh caluclation of electorate size.
 

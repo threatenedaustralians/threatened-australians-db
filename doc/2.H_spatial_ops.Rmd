@@ -1,12 +1,11 @@
 ---
-title: Spatial operations
-author: Gareth Kindler
+title: Spatial operations<br><h2>Threatened Australians (threatened.org.au)
+author: Gareth Kindler<br>The University of Queensland, Australia
+date: "`r format(Sys.time(), '%d %B, %Y')`"
 output:
     html_document:
         code_folding: show
 ---
-
-This document details the spatial operations of the data for the Threatened Australians (threatened.org.au) project.
 
 I run this code on a HPC, it could run locally but would just take a while.
 

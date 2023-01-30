@@ -1,16 +1,20 @@
 ---
-title: Cleaning animals images and info
-author: Gareth Kindler
+title: Cleaning animals images and info<br><h2>Threatened Australians (threatened.org.au)
+author: Gareth Kindler<br>The University of Queensland, Australia
+date: "`r format(Sys.time(), '%d %B, %Y')`"
 output:
     html_document:
         code_folding: show
 ---
 
-This document details the cleaning of the animals images and info for the Threatened Australians (threatened.org.au) project.
+```{r setup, include=FALSE, fig.align='center', warning=FALSE, message=FALSE}
+# knitr::opts_chunk$set(echo = TRUE, comment = "#")
+knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+```
 
 ## Libraries
 
-```{r, class.source = 'fold-hide'}
+```{r, message = FALSE, class.source = 'fold-hide'}
 library(tidyverse)
 library(sf)
 library(magrittr)
@@ -20,6 +24,7 @@ library(readxl)
 library(stringr)
 library(rmapshaper)
 library(httpgd)
+library(data.table)
 ```
 
 ## Import: Threatened Species
@@ -30,102 +35,109 @@ Gathering image URLs was a messy task. The steps for this were: \
 1. Query the Atlas of Living Australia (ALA) API and take the first image URL - this was done using `~/scripts/images/req_ALA_image_URLs.py` \
 2. Create a spreadsheet to check those ALA URLs and manually scourer the web for URLs of other images (gruelling work - 372 animal species and the ALA didn't return the majority) \
 3. Import this spreadsheet into this script \
+NG: because we've had some back and forth this got even messier so everything is a bit whack atm.
 
 `animals_info`:
 Information on threatened species was done by scraping the Species Profile and Threats (SPRAT) Database for description and habitat information using the script found at `~/scripts/species_info/scrape_SPRAT.py`. This was also quite messy and involved manual oversight/intervention which we'll describe later in this doc.
 
-```{r}
+```{r, message = FALSE}
 animals_images <- read_csv(
-    "data/animals_image_vetting/animals_image_vetting - ft_combined.csv"
+  "data/animals_image_vetting/animals_image_vetting - 22-05-20_animals_image_vetting.csv"
 )
+animals_ALA <- read_csv(
+  "data/animals_image_vetting/animals_API_image_URLs.csv"
+) %>%
+  select(taxon_ID, ALA_URL)
 animals_info <- fromJSON(
-    "data/animals_info_vetting/animals_info_SPRAT.json"
+  "data/animals_info_vetting/animals_info_SPRAT.json"
 )
 animals_ft <- fromJSON(
-    "output/clean_data/species_animals_clean.json"
-) %>%
-select(taxon_ID)
+  "output/clean_data/species_animals_clean.json"
+)
+species_animals_clean <- fromJSON(
+  "output/clean_data/species_animals_clean.json"
+)
 ```
 
 ## Clean: Animals Info
 
 To information scraped from SPRAT was messy and needed special characters to be removed along with replacements for null values. We decided to not include `habitat` information as this had added work and was deemed feature creep.
 
-```{r}
+```{r, message = FALSE}
 animals_info_for_vetting <- animals_info %>%
-    # mutate(
-    #     habitat = str_remove_all(
-    #             habitat,
-    #             "<.*?>"
-    #         )
-    #     ) %>%
-    mutate(
-        description = str_remove_all(
-                description,
-                "<.*?>"
-            )
-        ) %>%
-    mutate(
-        description = str_remove_all(
-                description,
-                " \\(.*?\\)"
-            )
-        ) %>%
-    mutate(
-        description = str_remove_all(
-                description,
-                "\\(.*?\\)"
-            )
-        ) %>%
-    mutate(
-        description = trimws(
-                description
-            )
-        ) %>%
-    mutate(
-        description = str_replace(
-                description,
-                "NA",
-                "No information was found for this species on the Species Profile and Threats Database (SPRAT) website, which is the database designed to provide information on species listed as threatened under the Environment Protection and Biodiversity Conservation (EPBC) Act 1999. This does not mean there is no information out there. We encourage you to do a web search using the scientific latin name."
-            )
-        ) %>%
-    # mutate(
-    #     description = trimws(
-    #         str_remove_all(
-    #             description,
-    #             "[^a-zA-Z0-9 -,'.]"
-    #         )
-    #     )
-    # ) %>%
-    # mutate(
-    #     habitat = trimws(
-    #         str_remove_all(
-    #             habitat,
-    #             "[^a-zA-Z0-9 -,'.]"
-    #         )
-    #     )
-    # ) %>%
-    select(
-        taxon_ID, scientific_name, vernacular_name,
-        SPRAT_profile, description
-    ) %T>%
-    write_csv(
-        "data/animals_info_vetting/animals_info_for_vetting.csv"
+  # mutate(
+  #     habitat = str_remove_all(
+  #             habitat,
+  #             "<.*?>"
+  #         )
+  #     ) %>%
+  mutate(
+    description = str_remove_all(
+      description,
+      "<.*?>"
     )
+  ) %>%
+  mutate(
+    description = str_remove_all(
+      description,
+      " \\(.*?\\)"
+    )
+  ) %>%
+  mutate(
+    description = str_remove_all(
+      description,
+      "\\(.*?\\)"
+    )
+  ) %>%
+  mutate(
+    description = trimws(
+      description
+    )
+  ) %>%
+  mutate(
+    description = str_replace(
+      description,
+      "NA",
+      "No information was found for this species on the Species Profile and Threats Database (SPRAT) website, which is the database designed to provide information on species listed as threatened under the Environment Protection and Biodiversity Conservation (EPBC) Act 1999. This does not mean there is no information out there. We encourage you to do a web search using the scientific latin name."
+    )
+  ) %>%
+  # mutate(
+  #     description = trimws(
+  #         str_remove_all(
+  #             description,
+  #             "[^a-zA-Z0-9 -,'.]"
+  #         )
+  #     )
+  # ) %>%
+  # mutate(
+  #     habitat = trimws(
+  #         str_remove_all(
+#             habitat,
+#             "[^a-zA-Z0-9 -,'.]"
+#         )
+#     )
+# ) %>%
+select(
+  taxon_ID, scientific_name, vernacular_name,
+  SPRAT_profile, description
+) %T>%
+  write_csv(
+    "data/animals_info_vetting/animals_info_for_vetting.csv"
+  )
 
 # Need to do some manual cleaning here
 # Save it then re-import
 
 animals_info_vetted <- read_csv(
-    "data/animals_info_vetting/animals_info_vettting - animals_info_vetted.csv"
+  "data/animals_info_vetting/animals_info_vettting - animals_info_vetted.csv"
 )
 
 animals_info_clean <- animals_info_vetted %>%
-    inner_join(animals_ft) %>%
-    select(taxon_ID, description) %T>%
-    write_json(
-        "output/clean_data/animals_info_clean.json"
-    )
+  # inner_join(animals_ft) %>%
+  select(taxon_ID, description) %T>%
+  write_json(
+    "output/clean_data/animals_info_clean.json"
+  )
 ```
 
 ## Clean: Images
@@ -138,57 +150,62 @@ To get the best sized image from the ALA URLs, we removed the `Thumbnail` text.
 
 ```{r}
 animals_images_clean <- animals_images %>%
-    inner_join(animals_ft) %>% # this is because of removing albo
-    select(
-        taxon_ID, ALA_URL,
-        ALA_API_image_URL, alt_URL
-        ) %>%
-    mutate(
-        image_URL =
-            case_when(
-                grepl("http", alt_URL) ~ paste0(alt_URL),
-                grepl("http", ALA_API_image_URL) ~ paste0(ALA_API_image_URL),
-                TRUE ~ "http://nickkellyresearch.com/wp-content/uploads/2022/03/Yellow-Footed-Rock-Wallaby.jpeg"
-            )
-        ) %>%
-    mutate(
-        image_URL =
-            case_when(
-                grepl(
-                    "https://images.ala.org.au", image_URL
-                ) ~ str_remove_all(
-                    .$image_URL,
-                    "ThumbnailLarge"
-                ),
-                TRUE ~ paste0(
-                    image_URL
-                )
-            )
-        ) %>%
-    mutate(
-        image_URL =
-            case_when(
-                grepl(
-                    "https://images.ala.org.au", image_URL
-                ) ~ str_remove_all(
-                    .$image_URL,
-                    "Thumbnail"
-                ),
-                TRUE ~ paste0(
-                    image_URL
-                )
-            )
-        ) %>%
-    select(
-        !c(
-            alt_URL, ALA_API_image_URL,
+  select(
+    taxon_ID, ALA_URL, ALA_API_image_URL, alt_URL
+  ) %>%
+  left_join(animals_ALA, by = "taxon_ID") %>%
+  mutate(
+    ALA_URL = ALA_URL.y
+  ) %>%
+  select(taxon_ID, ALA_URL, ALA_API_image_URL, alt_URL) %>%
+  inner_join(animals_ft) %>%
+  select(
+    taxon_ID, scientific_name, vernacular_name, ALA_URL,
+    ALA_API_image_URL, alt_URL
+  ) %>%
+  mutate(
+    image_URL =
+      case_when(
+        grepl("http", alt_URL) ~ paste0(alt_URL),
+        grepl("http", ALA_API_image_URL) ~ paste0(ALA_API_image_URL),
+        TRUE ~ "http://nickkellyresearch.com/wp-content/uploads/2022/03/Yellow-Footed-Rock-Wallaby.jpeg"
+      )
+  ) %>%
+  mutate(
+    image_URL =
+      case_when(
+        grepl(
+          "https://images.ala.org.au", image_URL
+        ) ~ str_remove_all(
+          .$image_URL,
+          "ThumbnailLarge"
+        ),
+        TRUE ~ paste0(
+          image_URL
         )
-    ) %T>%
-    # write_csv(
-    #     "output/clean_data/animals_images_clean.csv"
-    # ) %T>%
-    write_json(
-        "output/clean_data/animals_images_clean.json"
+      )
+  ) %>%
+  mutate(
+    image_URL =
+      case_when(
+        grepl(
+          "https://images.ala.org.au", image_URL
+        ) ~ str_remove_all(
+          .$image_URL,
+          "Thumbnail"
+        ),
+        TRUE ~ paste0(
+          image_URL
+        )
+      )
+  ) %>%
+  select(
+    c(
+      taxon_ID, ALA_URL, image_URL
     )
+  ) %T>%
+  write_json(
+    "output/clean_data/animals_images_clean.json"
+)
 ```
 

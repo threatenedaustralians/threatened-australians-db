@@ -1,12 +1,16 @@
 ---
-title: Creating TSX data for graphs
-author: Gareth Kindler
+title: Creating TSX data for graphs<br><h2>Threatened Australians (threatened.org.au)
+author: Gareth Kindler<br>The University of Queensland, Australia
+date: "`r format(Sys.time(), '%d %B, %Y')`"
 output:
     html_document:
         code_folding: show
 ---
 
-This document details the creation of the underlying data for the TSX graphs on Threatened Australians (threatened.org.au).
+```{r setup, include=FALSE, fig.align='center', warning=FALSE, message=FALSE}
+# knitr::opts_chunk$set(echo = TRUE, comment = "#")
+knitr::opts_knit$set(root.dir = "../")
+```
 
 ## Libraries
 
@@ -15,216 +19,87 @@ library(tidyverse)
 library(sf)
 library(jsonlite)
 library(magrittr)
-library(rlpi)
 library(httpgd)
 ```
 
-## Import: TSX files
 
-Download the TSX files from the [interactive viewer](https://tsx.org.au/tsx/#/) for each state.
+##
+
+Originally, we were recreating the index from the CSV the [interactive viewer](https://tsx.org.au/tsx/#/) was producing for each of the relevant states (NSW and ACT were kept together because of data paucity and geography) to get the trend lines. You can find the script for this in this file's history. Recently, the TSX peeps added the function to the interactive viewer that you can just download the trend lines for each state. Now we do this instead.
+
+
+## Import: TSX
 
 ```{r}
-NSW_ACT_tsx <- read.csv(
-    "data/TSX/NSW_ACT_tsxdata/tsxdata.csv",
-    na.strings = "", quote = "\"", sep = ","
+tsx_NSW_ACT <- read.delim(
+    "data/TSX/NSW_ACT_tsxdata/tsx-trend.txt",
+    sep = " "
 )
-NT_tsx <- read.csv(
-    "data/TSX/NT_tsxdata/tsxdata.csv",
-    na.strings = "", quote = "\"", sep = ","
+tsx_NT <- read.delim(
+    "data/TSX/NT_tsxdata/tsx-trend.txt",
+    sep = " "
 )
-QLD_tsx <- read.csv(
-    "data/TSX/QLD_tsxdata/tsxdata.csv",
-    na.strings = "", quote = "\"", sep = ","
+tsx_QLD <- read.delim(
+    "data/TSX/QLD_tsxdata/tsx-trend.txt",
+    sep = " "
 )
-SA_tsx <- read.csv(
-    "data/TSX/SA_tsxdata/tsxdata.csv",
-    na.strings = "", quote = "\"", sep = ","
+tsx_SA <- read.delim(
+    "data/TSX/SA_tsxdata/tsx-trend.txt",
+    sep = " "
 )
-TAS_tsx <- read.csv(
-    "data/TSX/TAS_tsxdata/tsxdata.csv",
-    na.strings = "", quote = "\"", sep = ","
+tsx_TAS <- read.delim(
+    "data/TSX/TAS_tsxdata/tsx-trend.txt",
+    sep = " "
 )
-VIC_tsx <- read.csv(
-    "data/TSX/VIC_tsxdata/tsxdata.csv",
-    na.strings = "", quote = "\"", sep = ","
+tsx_VIC <- read.delim(
+    "data/TSX/VIC_tsxdata/tsx-trend.txt",
+    sep = " "
 )
-WA_tsx <- read.csv(
-    "data/TSX/WA_tsxdata/tsxdata.csv",
-    na.strings = "", quote = "\"", sep = ","
+tsx_WA <- read.delim(
+    "data/TSX/WA_tsxdata/tsx-trend.txt",
+    sep = " "
 )
 ```
 
-## Clean and Create: LPI and graphs
-
-Use 'here' package to set_wd to location you want files produced at. I haven't looked into how LPI works but essentially you have to `create_infile` then `LPIMain` straight after per graph otherwise they write over eachother and you end up with the same graph for each state.
+## Clean: TSX
 
 ```{r}
-infile_NSW_ACT <- create_infile(
-    NSW_ACT_tsx,
-    name = "infile",
-    start_col_name = "X1985",
-    end_col_name = "X2017"
-)
-tsx_NSW_ACT <- LPIMain(
-    infile_NSW_ACT,
-    REF_YEAR = 1985,
-    PLOT_MAX = 2017,
-    BOOT_STRAP_SIZE = 1000,
-    VERBOSE = TRUE,
-    goParallel = TRUE,
-    title = "tsx_NSW_ACT",
-    plot_lpi = 0,
-    save_plots = 0
-) %>%
-na.omit() %>%
-tibble::rownames_to_column("ref_year") %T>%
-    write_json(
+tsx_clean <- function(x) {
+    x |>
+        na.omit() |>
+        rownames_to_column("ref_year") |>
+        as_tibble()
+}
+```
+
+```{r}
+tsx_NSW_ACT_clean <- tsx_clean(tsx_NSW_ACT) %T>%
+    write_json(.,
         "output/analysed_data/final/imports/tsx_NSW_ACT_tbl.json"
     )
-plot(tsx_NSW_ACT$ref_year, tsx_NSW_ACT$LPI_final, "l")
-
-infile_NT <- create_infile(
-    NT_tsx,
-    name = "infile",
-    start_col_name = "X1985",
-    end_col_name = "X2017"
-)
-tsx_NT <- LPIMain(
-    infile_NT,
-    REF_YEAR = 1985,
-    PLOT_MAX = 2017,
-    BOOT_STRAP_SIZE = 1000,
-    VERBOSE = TRUE,
-    goParallel = TRUE,
-    title = "tsx_NT",
-    plot_lpi = 0,
-    save_plots = 0
-) %>%
-na.omit() %>%
-tibble::rownames_to_column("ref_year") %T>%
-    write_json(
+tsx_NT_clean <- tsx_clean(tsx_NT) %T>%
+    write_json(.,
         "output/analysed_data/final/imports/tsx_NT_tbl.json"
     )
-plot(tsx_NT$ref_year, tsx_NT$LPI_final, "l")
-
-infile_QLD <- create_infile(
-    QLD_tsx,
-    name = "infile",
-    start_col_name = "X1985",
-    end_col_name = "X2017"
-)
-tsx_QLD <- LPIMain(
-    infile_QLD,
-    REF_YEAR = 1985,
-    PLOT_MAX = 2017,
-    BOOT_STRAP_SIZE = 1000,
-    VERBOSE = TRUE,
-    goParallel = TRUE,
-    title = "tsx_QLD",
-    plot_lpi = 0,
-    save_plots = 0
-) %>%
-na.omit() %>%
-tibble::rownames_to_column("ref_year") %T>%
-    write_json(
+tsx_QLD_clean <- tsx_clean(tsx_QLD) %T>%
+    write_json(.,
         "output/analysed_data/final/imports/tsx_QLD_tbl.json"
     )
-plot(tsx_QLD$ref_year, tsx_QLD$LPI_final, "l")
-
-infile_SA <- create_infile(
-    SA_tsx,
-    name = "infile",
-    start_col_name = "X1985",
-    end_col_name = "X2017"
-)
-tsx_SA <- LPIMain(
-    infile_SA,
-    REF_YEAR = 1985,
-    PLOT_MAX = 2017,
-    BOOT_STRAP_SIZE = 1000,
-    VERBOSE = TRUE,
-    goParallel = TRUE,
-    title = "tsx_SA",
-    plot_lpi = 0,
-    save_plots = 0
-) %>%
-na.omit() %>%
-tibble::rownames_to_column("ref_year") %T>%
-    write_json(
+tsx_SA_clean <- tsx_clean(tsx_SA) %T>%
+    write_json(.,
         "output/analysed_data/final/imports/tsx_SA_tbl.json"
     )
-plot(tsx_SA$ref_year, tsx_SA$LPI_final, "l")
-
-infile_TAS <- create_infile(
-    TAS_tsx,
-    name = "infile",
-    start_col_name = "X1985",
-    end_col_name = "X2017"
-)
-tsx_TAS <- LPIMain(
-    infile_TAS,
-    REF_YEAR = 1985,
-    PLOT_MAX = 2017,
-    BOOT_STRAP_SIZE = 1000,
-    VERBOSE = TRUE,
-    goParallel = TRUE,
-    title = "tsx_TAS",
-    plot_lpi = 0,
-    save_plots = 0
-) %>%
-na.omit() %>%
-tibble::rownames_to_column("ref_year") %T>%
-    write_json(
+tsx_TAS_clean <- tsx_clean(tsx_TAS) %T>%
+    write_json(.,
         "output/analysed_data/final/imports/tsx_TAS_tbl.json"
     )
-plot(tsx_TAS$ref_year, tsx_TAS$LPI_final, "l")
-
-infile_VIC <- create_infile(
-    VIC_tsx,
-    name = "infile",
-    start_col_name = "X1985",
-    end_col_name = "X2017"
-)
-tsx_VIC <- LPIMain(
-    infile_VIC,
-    REF_YEAR = 1985,
-    PLOT_MAX = 2017,
-    BOOT_STRAP_SIZE = 1000,
-    VERBOSE = TRUE,
-    goParallel = TRUE,
-    title = "tsx_VIC",
-    plot_lpi = 0,
-    save_plots = 0
-) %>%
-na.omit() %>%
-tibble::rownames_to_column("ref_year") %T>%
-    write_json(
+tsx_VIC_clean <- tsx_clean(tsx_VIC) %T>%
+    write_json(.,
         "output/analysed_data/final/imports/tsx_VIC_tbl.json"
     )
-plot(tsx_VIC$ref_year, tsx_VIC$LPI_final, "l")
-
-infile_WA <- create_infile(
-    WA_tsx,
-    name = "infile",
-    start_col_name = "X1985",
-    end_col_name = "X2017"
-)
-tsx_WA <- LPIMain(
-    infile_WA,
-    REF_YEAR = 1985,
-    PLOT_MAX = 2017,
-    BOOT_STRAP_SIZE = 1000,
-    VERBOSE = TRUE,
-    goParallel = TRUE,
-    title = "tsx_WA",
-    plot_lpi = 0,
-    save_plots = 0
-) %>%
-na.omit() %>%
-tibble::rownames_to_column("ref_year") %T>%
-    write_json(
+tsx_WA_clean <- tsx_clean(tsx_WA) %T>%
+    write_json(.,
         "output/analysed_data/final/imports/tsx_WA_tbl.json"
     )
-plot(tsx_WA$ref_year, tsx_WA$LPI_final, "l")
 ```
 

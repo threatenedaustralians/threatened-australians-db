@@ -1,16 +1,20 @@
 ---
-title: Filtering threatened species
-author: Gareth Kindler
+title: Filtering threatened species<br><h2>Threatened Australians (threatened.org.au)
+author: Gareth Kindler<br>The University of Queensland, Australia
+date: "`r format(Sys.time(), '%d %B, %Y')`"
 output:
     html_document:
         code_folding: show
 ---
 
-This document details the of species lists for the Threatened Australians (threatened.org.au) project.
+```{r setup, include=FALSE, fig.align='center', warning=FALSE, message=FALSE}
+# knitr::opts_chunk$set(echo = TRUE, comment = "#")
+knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+```
 
 ## Libraries
 
-```{r, eval = FALSE, class.source = 'fold-hide'}
+```{r, message = FALSE, class.source = 'fold-hide'}
 library(tidyverse)
 library(sf)
 library(magrittr)
@@ -24,7 +28,7 @@ library(httpgd)
 
 ## Import: Threatened Species and threats
 
-```{r}
+```{r, message = FALSE}
 species <- st_read(
     "output/clean_data/species_clean.gpkg"
 )
@@ -46,7 +50,7 @@ species_ft <- species_elects %>%
     group_by(taxon_ID) %>%
     summarise() %>%
     ungroup() %>%
-    inner_join(threats_collapsed) %>%
+    # inner_join(threats_collapsed) %>%
     select(taxon_ID) %T>%
     write_json(
         "output/clean_data/species_ft.json"
@@ -62,7 +66,7 @@ The SNES data attributes of `marine` and `cetacean` don't capture all species of
 ```{r}
 species_animals_clean <- species %>%
     st_set_geometry(NULL) %>%
-    inner_join(species_ft) %>%
+    # inner_join(species_ft) %>%
     filter(
         taxon_kingdom %in% "Animalia"
     ) %>%
@@ -96,7 +100,17 @@ species_animals_clean <- species %>%
             "Thalassarche steadi", # White-capped Albatross
             "Thalassarche eremita", # Chatham Albatross
             "Diomedea sanfordi", # Northern Royal Albatross
-            "Diomedea epomophora" # Southern Royal Albatross
+            "Diomedea epomophora", # Southern Royal Albatross
+            "Sterna vittata bethunei",	# New Zealand Antarctic Tern
+            "Sterna vittata vittata", # Antarctic Tern (Indian Ocean)
+            "Leucocarbo atriceps nivalis",	# Imperial Shag (Heard Island)
+            "Leucocarbo atriceps purpurascens", # Imperial Shag (Macquarie Island)
+            "Centrophorus harrissoni",	# Harrisson's Dogfish
+            "Galeorhinus galeus", # School Shark
+            "Hoplostethus atlanticus",	# Orange Roughy
+            "Seriolella brama", # Blue Warehou
+            "Centrophorus zeehaani", #	Southern Dogfish
+            "Dendronephthya australis" # Cauliflower Soft Coral
         )
     ) %T>%
     write_json(
@@ -109,7 +123,7 @@ species_animals_clean <- species %>%
 ```{r}
 species_plants_clean <- species %>%
     st_set_geometry(NULL) %>%
-    inner_join(species_ft) %>%
+    # inner_join(species_ft) %>%
     filter(
         taxon_kingdom %in% "Plantae"
     ) %T>%
@@ -125,10 +139,12 @@ species_plants_clean <- species %>%
 
 ### Marine
 
+NB: Haven't updated this list to reflect the fish etc captured in animals as I've started to do. I'm not super interested in perfecting the segregation as I only care about getting animals relevant to the electoral system.
+
 ```{r}
 species_marine_clean <- species %>%
     st_set_geometry(NULL) %>%
-    inner_join(species_ft) %>%
+    # inner_join(species_ft) %>%
     filter(
         marine %in% c(
             "Listed", "Listed - overfly marine area"

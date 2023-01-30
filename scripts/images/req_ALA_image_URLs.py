@@ -37,7 +37,7 @@ import pandas as pd
 pd.options.mode.chained_assignment = None  # default='warn'
 
 
-animals = pd.read_json("output/clean_data/species_clean_FT_animals.json")
+animals = pd.read_json("output/clean_data/species_animals_clean.json")
 
 # main requests
 
@@ -103,7 +103,14 @@ animals['ALA_API_image_URL'] = animals.apply(
     lambda row: get_API_image_URL(row['scientific_name']), axis=1)
 
 animals = pd.DataFrame(animals)
+
+animalsexp = animals[['taxon_ID', 'scientific_name', 'vernacular_name', 'ALA_URL', 'ALA_API_image_URL']]
+
+animalsexp.to_csv(
+    "data/animals_image_vetting/animals_API_image_URLs.csv"
+)
+
 animals.to_json(
-    "data/image_vetting/animals_API_image_URLs.json",
+    "data/animals_image_vetting/animals_API_image_URLs.json",
     orient="records"
 )

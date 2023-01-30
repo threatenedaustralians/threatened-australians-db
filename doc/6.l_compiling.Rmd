@@ -1,16 +1,20 @@
 ---
-title: Compiling the clean and analysed data into tables
-author: Gareth Kindler
+title: Compiling the clean and analysed data into tables<br><h2>Threatened Australians (threatened.org.au)
+author: Gareth Kindler<br>The University of Queensland, Australia
+date: "`r format(Sys.time(), '%d %B, %Y')`"
 output:
     html_document:
         code_folding: show
 ---
 
-This document details the compiling of data into tables for the database (and user downloads) of the Threatened Australians (threatened.org.au) project.
+```{r setup, include=FALSE, fig.align='center', warning=FALSE, message=FALSE}
+# knitr::opts_chunk$set(echo = TRUE, comment = "#")
+knitr::opts_knit$set(root.dir = "../")
+```
 
 ## Libraries
 
-```{r, eval = FALSE, class.source = 'fold-hide'}
+```{r, message = FALSE, class.source = 'fold-hide'}
 library(tidyverse)
 library(sf)
 library(rmapshaper) # For installing use 'library(remotes)'
@@ -129,7 +133,7 @@ species_elects_tbl <- species_elects %>%
             # species_range_intersects_with_n_electorates != 1
             ~ paste0(
                     scientific_name_clean,
-                    " has greater than 80% of it's range within ",
+                    " has greater than 80% of its range within ",
                     electorate
                 ),
             TRUE ~ paste0(
@@ -244,31 +248,27 @@ species_elects_ref_tbl <- species_elects_tbl %>%
     )
 ```
 
-### Individual tables for users to download
-
-```{r}
-write_elects_csv = function(data) {
-    write_csv(
-        data, paste0("/home/gareth/science/eSpace/threatened_australians/electorate_species_lists/",
-        unique(data$electorate), "_species_list.csv"
-        )
-    )
-    return(data)
-}
-
-species_elects_ref_tbl %>%
-    group_by(electorate) %>%
-    do(write_elects_csv(.))
-```
-
 ## Table: Animals
 
 ```{r}
 animals_tbl <- species %>%
-    inner_join(animals_ft) %>%
-    inner_join(animals_info) %>%
-    inner_join(animals_images) %>%
-    inner_join(threats_collapsed) %>%
+    right_join(animals_ft) |>
+    full_join(animals_info) |>
+    mutate(
+        description = replace_na(
+            description,
+            "No information was found for this species on the Species Profile and Threats Database (SPRAT) website, which is the database designed to provide information on species listed as threatened under the Environment Protection and Biodiversity Conservation (EPBC) Act 1999. This does not mean there is no information out there. We encourage you to do a web search using the scientific latin name."
+        )
+    ) |>
+    full_join(animals_images) |>
+    left_join(threats_collapsed) |>
+    mutate(
+        threat_ID_collapsed = replace_na(
+            threat_ID_collapsed,
+            "T09"
+        )
+    ) |>
+    right_join(animals_ft) |>
     mutate(
         vernacular_name_first_clean = replace(
             vernacular_name_first_clean,
@@ -320,6 +320,22 @@ animals_tbl <- species %>%
     )
 ```
 
+
+```{r check-animals_tbl}
+summary(animals_tbl)
+apply(animals_tbl, MARGIN = 2, function(x) sum(is.na(x)))
+get_range <- function(x) {
+    if (is.numeric(x)) {
+        return(paste0("min: ", min(x), ", max: ", max(x)))
+    } else {
+        return(paste0("unique: ", length(unique(x))))
+    }
+}
+apply(animals_tbl, MARGIN = 2, get_range)
+```
+
+Based on the `scientific_name_clean` coming out as one less unique than the `taxon_ID` - `r animals_tbl |> group_by(scientific_name_clean) |> summarise(n = n()) |> filter(n > 1)`. The Spot-tailed quoll and the Spotted-tail quoll.
+
 ## Table: Elects
 
 On the *Browser* page, there is the option to explore other electorates by a couple of filters, one such is by the number of animals and plants found within the boundaries of each electorate.
@@ -360,11 +376,24 @@ elects_tbl <- elects %>%
     st_write(
         "output/analysed_data/final/imports/elects_tbl.geojson",
         layer = "elects_tbl", append = FALSE, delete_dsn = TRUE
-    ) %>%
+    ) |>
     st_set_geometry(NULL) %T>%
     write_csv(
         "output/analysed_data/ref_tables/elects_tbl.csv"
     )
+```
+
+```{r check-elects_tbl}
+summary(elects_tbl)
+apply(elects_tbl, MARGIN = 2, function(x) sum(is.na(x)))
+get_range <- function(x) {
+    if (is.numeric(x)) {
+        return(paste0("min: ", min(x), ", max: ", max(x)))
+    } else {
+        return(paste0("unique: ", length(unique(x))))
+    }
+}
+apply(elects_tbl, MARGIN = 2, get_range)
 ```
 
 ## Table: Postcodes-elects
@@ -425,16 +454,4 @@ threats_tbl <- threats %>%
     write_json(
         "output/analysed_data/final/imports/threats_tbl.json"
     )
-```
-
-## Copy: eSpace
-
-Copy the output directory to eSpace so people can access and download the data.
-
-```{r}
-file.copy(
-    "/home/gareth/science/projects/electoral/threatened_australians/output/",
-    "/home/gareth/science/eSpace/threatened_australians/",
-    recursive = TRUE
-)
 ```

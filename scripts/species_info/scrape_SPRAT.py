@@ -12,10 +12,14 @@ import re
 # import geopandas as gpd
 pd.options.mode.chained_assignment = None
 
-animals = pd.read_json("output/clean_data/species_FT_animals_clean.json")
+# animals = pd.read_json("output/clean_data/species_FT_animals_clean.json")
+# plants = pd.read_json("output/clean_data/species_plants_clean.json")
+species = pd.read_json("output/clean_data/species_clean_no_geom.json")
 
-plants = pd.read_json("output/clean_data/species_plants_clean.json")
+species = species[['taxon_ID', 'scientific_name',
+    'vernacular_name', 'SPRAT_profile']]
 
+# species = species.sample(n=10)
 
 headers = {'user-agent': 'my-app/0.0.1'}
 
@@ -57,7 +61,7 @@ def get_descrip(species_ID):
         if descrip_find:
             descrip_text = descrip_find.find_next("p")
             descrip_text = str(descrip_text)
-            # optimise the next two lines
+            # remove all html tags in one line of code
             descrip_text = descrip_text.replace("<p>", "")
             descrip_text = descrip_text.replace("</p>", "")
             return descrip_text
@@ -71,40 +75,27 @@ def get_descrip(species_ID):
             return "NA"
 
 
-def get_habitat(species_ID):
-    species_url = "http://www.environment.gov.au/cgi-bin/sprat/public/publicspecies.pl?taxon_id=" + \
-        str(species_ID)
-    print(species_ID)
-    species_html = get_data(species_url)
-    if species_html == "Request failed":
-        return "Request failed"
-    else:
-        species_html_text = BeautifulSoup(species_html.text, 'html.parser')
-        # cache/fork/split here
-        habitat_find = species_html_text.find("a", string="Habitat")
-        if habitat_find:
-            habitat_text = habitat_find.find_next("p")
-            habitat_text = str(habitat_text)
-            # optimise the next two lines
-            habitat_text = habitat_text.replace("<p>", "")
-            habitat_text = habitat_text.replace("</p>", "")
-            return habitat_text
-        else:
-            return "NA"
-
-
-animals['description'] = animals.apply(
+species['description'] = species.apply(
     lambda row: get_descrip(row['taxon_ID']), axis=1)
-animals['habitat'] = animals.apply(
-    lambda row: get_habitat(row['taxon_ID']), axis=1)
 
-animals_df = pd.DataFrame(animals)
-animals.to_json(
-    "data/animals_info_SPRAT.json",
+
+species_df = pd.DataFrame(species)
+
+species.to_json(
+    "data/EJA_species_info_SPRAT.json",
     orient="records"
+)
+species.to_csv(
+    "data/EJA_species_info_SPRAT.csv",
+    index=False
 )
 
 ######################################
+
+# request html text from species url
+# extract description and habitat text
+# return description and habitat text into separate columns in dataframe
+# return dataframe
 
 
 def get_info(species_ID):
